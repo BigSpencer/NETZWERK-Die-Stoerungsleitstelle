@@ -116,6 +116,129 @@ Anders als „Fahrzeuge hin, Einsatz fertig“ hat jeder Auftrag **Phasen**. Nac
 | Dokumentation | Zahlungsdauer (schlechte Doku = Zahlung verzögert) |
 | Kosten (Anfahrt, Überstunden) | Gewinnmarge |
 
+### 5.6 Auftragsstufen und Befähigungen – wer darf was?
+
+Grundsatz: **Welche Aufträge ein Spieler bekommt, hängt davon ab, was seine Firma kann.** Was sie kann, ergibt sich aus der Qualifikation der Mitarbeiter und aus dem Fuhrpark. Wertvollere Aufträge gibt es nicht durch Levelaufstieg, sondern weil man das passende Personal ausbildet und die nötige Technik anschafft.
+
+#### Auftragsstufen
+
+Jeder Auftragstyp gehört zu einer **Stufe von 1 bis 5**. Je höher die Stufe, desto höher die Vergütung, desto strenger die Fristen und desto größer das Risiko.
+
+| Stufe | Charakter | Vergütung (Richtwert) | Typische Fristen | Risiko bei Fehlern |
+|---|---|---|---|---|
+| 1 – Basis | Einfache Instandsetzung, ein Ort | 200–800 € | großzügig | gering |
+| 2 – Fachaufgabe | Fachkraft nötig, kleine Wendungen | 800–2.500 € | mittel | Nacharbeit |
+| 3 – Spezialaufgabe | Spezialausbildung **oder** Spezialfahrzeug | 2.500–8.000 € | eng | Vertragsstrafe, Folgeaufträge |
+| 4 – Netzaufgabe | Mehrere Trupps, mehrere Phasen, Spezialtechnik | 8.000–25.000 € | sehr eng | hohe Strafe, Reputationsverlust |
+| 5 – Großprojekt | Nur mit Zertifizierung oder als Arbeitsgemeinschaft (ARGE) | 25.000 € + | vertraglich verhandelt | Vertragskündigung |
+
+#### Beispiel-Leiter: Sparte Elektro
+
+| Stufe | Auftrag | Mindestanforderung | Alternative |
+|---|---|---|---|
+| 1 | Defekte Straßenlaterne (Leuchtmittel, Vorschaltgerät) | Monteurtransporter + 2 Monteure | – |
+| 1 | Mastklappe/Leuchte beschädigt (Unfall) | Transporter + 2 Monteure + Absicherungsanhänger | – |
+| 2 | Straßenbeleuchtung, ganzer Straßenzug ausgefallen | 1 Elektrofachkraft + Hubarbeitsbühne | – |
+| 2 | Hausanschluss ohne Strom | 1 Elektrofachkraft + Transporter | – |
+| 2 | Kabelverteilerschrank angefahren | 1 Elektrofachkraft + 1 Monteur + Transporter | – |
+| 3 | **Defekte Trafostation (Ortsnetz)** | **Weg A:** 1 Monteur mit **Schaltberechtigung** + 1 Elektrofachkraft + Transporter | **Weg B:** **Netzersatzanlage** (Notstrom-Lkw) + 1 Elektrofachkraft |
+| 3 | Kabelfehler Niederspannung (Ort unbekannt) | **Kabelmesswagen** + Elektrofachkraft | Ohne Messwagen: Suche per Aufgraben (Minibagger, sehr langsam, Frist kaum zu halten) |
+| 4 | Kabelfehler Mittelspannung | Kabelmesswagen + **Kabelmuffenmonteur** + Tiefbautrupp mit Bagger + Schaltberechtigter | – |
+| 4 | Umbau Trafostation (geplant) | Schaltberechtigter + Ladekran + 2 Elektrofachkräfte | – |
+| 5 | Netzerneuerung Wohngebiet (Rahmenprojekt) | Zertifizierung „Netzbau-Fachbetrieb“ + mind. 3 Muffenmonteure + Tiefbaukolonne | Als ARGE mit einem Tiefbau-Spieler |
+
+#### UND-/ODER-Anforderungen: zwei Wege zum Ziel
+
+Viele Aufträge ab Stufe 3 lassen sich **auf mehreren Wegen** erfüllen. Das ist eine bewusste strategische Entscheidung: Investiert man in **Menschen** (Ausbildung) oder in **Maschinen** (Fahrzeugkauf)?
+
+Beispiel Trafostation:
+
+- **Weg A – Reparatur durch Qualifikation:** Der schaltberechtigte Monteur schaltet die Station frei, der Fehler wird vor Ort behoben. → **volle Vergütung**, schnell erledigt. Die Ausbildung kostet allerdings Zeit, und die Fachkraft verlangt höheren Lohn.
+- **Weg B – Überbrückung durch Technik:** Die Netzersatzanlage speist die betroffenen Straßen vorübergehend. → Die Reaktionsfrist ist erfüllt, aber es gibt **nur eine Teilvergütung (≈ 60 %)**. Die endgültige Reparatur wird als **Folgeauftrag** ausgeschrieben, und den bekommt eventuell ein anderer Spieler. Dafür taugt die Netzersatzanlage auch für Großlagen und Veranstaltungen und kann vermietet werden.
+
+```yaml
+auftragstyp: trafostation_stoerung
+sparte: Elektro
+stufe: 3
+anforderungen:
+  wege:
+    - name: "Reparatur"
+      personal: [Schaltberechtigung x1, Elektrofachkraft x1]
+      fahrzeug: [Monteurtransporter]
+      verguetung_faktor: 1.0
+    - name: "Überbrückung"
+      personal: [Elektrofachkraft x1]
+      fahrzeug: [Netzersatzanlage]
+      verguetung_faktor: 0.6
+      erzeugt_folgeauftrag: trafostation_instandsetzung
+```
+
+#### Annehmen vs. Erhalten
+
+Wie gut eine Firma aufgestellt ist, wirkt sich auf zwei Ebenen aus:
+
+1. **Annehmen (Auftragsbörse):** Einen Auftrag annehmen kann nur, wer die Anforderungen mindestens eines Weges **grundsätzlich** erfüllt. Das Personal muss also angestellt und das Fahrzeug im Besitz sein, beides muss aber nicht gerade frei sein. Wer annimmt und dann keine freien Kapazitäten hat, riskiert eine Vertragsstrafe.
+2. **Erhalten (Direktvergabe, Rahmenverträge, Ausschreibungen):** Auftraggeber kommen von sich aus nur auf Firmen zu, die ihre **Befähigung nachgewiesen** haben:
+   - **Personaldecke:** mindestens zwei Personen mit der Qualifikation, damit Ausfälle und Schichten abgedeckt sind.
+   - **Referenzen:** eine bestimmte Zahl erfolgreich erledigter Aufträge der Stufe darunter, z. B. 10× Stufe 2, bevor Rahmenverträge der Stufe 3 angeboten werden.
+   - **Reputation** beim jeweiligen Auftraggeber.
+   - ab Stufe 4: **Zertifizierung** (siehe Kap. 9).
+
+#### Sichtbarkeit: Ziele zeigen, nicht verstecken
+
+Die Auftragsbörse zeigt zusätzlich die Aufträge **eine Stufe über dem eigenen Niveau**, ausgegraut und mit einem konkreten Hinweis:
+
+> 🔒 *Defekte Trafostation Gartenweg – 4.200 €*
+> Dir fehlt: **Schaltberechtigung** (Ausbildung: 2 Spieltage, 3.500 €) **oder** **Netzersatzanlage** (Kauf: 48.000 € / Leasing: 900 € je Spieltag)
+
+So sieht der Spieler immer, wofür sich die nächste Investition lohnt. Ein Klick auf den Hinweis öffnet direkt die Ausbildungs- bzw. Fahrzeugplanung.
+
+#### Ausbildungswege (Beispiel Elektro)
+
+```
+Monteur (Start)
+  └─► Elektrofachkraft            [Voraussetzung: 15 Aufträge Stufe 1 · 1 Spieltag · 1.500 €]
+        ├─► Schaltberechtigung    [10 Aufträge Stufe 2 · 2 Spieltage · 3.500 €]
+        │     └─► Arbeiten unter Spannung (AuS)  [Zertifikat · 4 Spieltage · 9.000 €]
+        └─► Kabelmuffenmonteur    [8 Aufträge Stufe 2 · 3 Spieltage · 5.000 €]
+              └─► Muffenmonteur Mittelspannung   [Schaltberechtigung im Team · 3 Spieltage]
+```
+
+- Ausbildung setzt **Praxiserfahrung** voraus: Die Person muss vorher Aufträge der nötigen Stufe erledigt haben. So zahlt sich auch die Arbeit an einfachen Aufträgen aus.
+- Während der Ausbildung **fällt die Person aus**.
+- Höher qualifizierte Mitarbeiter verlangen **mehr Lohn** und können **abgeworben** werden. Ein Bonus oder eine Bindungsprämie hält sie im Betrieb.
+- **Überqualifikation kostet:** Wer die Schaltberechtigte an eine Laterne schickt, zahlt ihren hohen Stundenlohn für einen Auftrag der Stufe 1, und für die Trafostation ist sie dann nicht frei.
+
+#### Qualifikation wirkt nicht nur als Schalter
+
+Neben den reinen Freischaltungen beeinflusst Qualifikation auch, **wie gut** ein Auftrag läuft:
+
+| Einsatz | Wirkung |
+|---|---|
+| Mindestqualifikation | Normale Bearbeitungszeit, normales Wendungsrisiko |
+| Höhere Qualifikation / viel Erfahrung | Fehlersuche bis zu 40 % schneller, bessere Doku, weniger Nacharbeit |
+| Passendes Spezialfahrzeug, obwohl es auch ohne ginge | Phase verkürzt (z. B. Kabelmesswagen statt Aufgraben) |
+
+#### Spartenübergreifende Synergien
+
+Manche Befähigungen nützen in mehreren Sparten und machen Expansion attraktiver:
+
+| Befähigung | Nutzen in |
+|---|---|
+| Tiefbautrupp + Minibagger | Elektro (Kabel), Gas/Wasser (Rohre), Telekom (Leerrohre) |
+| Verkehrssicherer + Absicherungsanhänger | jede Baustelle im Straßenraum: Pflicht ab Stufe 2 an Hauptstraßen |
+| Ladekran | Trafostationen, Schachtbauwerke, Sturmschäden |
+
+#### Weitere Sparten im Kurzüberblick
+
+| Sparte | Stufe 1 | Stufe 3 (Schlüsselbefähigung) | Stufe 4–5 |
+|---|---|---|---|
+| Gas & Wasser | Zählerwechsel, tropfender Hydrant | Rohrbruch Hauptleitung → **Rohrnetzmonteur** + Saugbagger | Gasleitung unter Druck anbohren → Zertifikat „Gas-Fachbetrieb“ |
+| Abwasser | Verstopfter Straßenablauf → Spülwagen | Schadenssuche → **Kanal-TV-Fahrzeug** **oder** Kanaltechniker + Begehung | Pumpwerkausfall, Inliner-Sanierung |
+| Verkehrstechnik | Ampel-Lampe tauschen | Steuergerät defekt → **Signaltechniker** | Knotenpunkt neu programmieren, Verkehrsrechner |
+| Telekom | Hausanschluss-Dose | Glasfaserschaden → **Spleißtechniker** + Spleißfahrzeug | Backbone-Störung, Funkmast (Höhenarbeit) |
+| Kommunaldienst | Ast auf Gehweg | Sturmbaum auf Fahrbahn → **Motorsägenschein** + Ladekran | Großlage Sturmtief (ARGE) |
+
 ## 6. Ressourcen
 
 ### 6.1 Personal (statt anonymer Besatzung)
@@ -127,7 +250,7 @@ Personal ist die **knappste Ressource**. Jede Person hat:
 - **Erschöpfung:** Lange Einsätze senken die Arbeitsgeschwindigkeit; Ruhezeiten müssen eingehalten werden.
 - **Erfahrung:** Personal levelt in seinen Sparten → kürzere Fehlersuche, bessere Doku.
 
-Weiterbildungen kosten Zeit (Person fällt aus) und Geld – eine bewusste Investitionsentscheidung.
+Weiterbildungen kosten Zeit (Person fällt aus) und Geld – eine bewusste Investitionsentscheidung. Sie sind der wichtigste Hebel, um höhere Auftragsstufen freizuschalten (siehe 5.6).
 
 ### 6.2 Fahrzeuge & Geräte
 
@@ -140,6 +263,8 @@ Weiterbildungen kosten Zeit (Person fällt aus) und Geld – eine bewusste Inves
 | Verkehr | Absicherungsanhänger, Leitpfosten-Transporter |
 | Winter | Streufahrzeug, Räumschild-Unimog |
 | Mobile Versorgung | Notstromaggregat, Trinkwasser-Anhänger |
+
+Spezialfahrzeuge (Hubarbeitsbühne, Kabelmesswagen, Netzersatzanlage, Kanal-TV-Fahrzeug …) sind neben der Ausbildung der zweite Weg zu höheren Auftragsstufen (siehe 5.6). Sie sind teuer, lassen sich dafür aber oft in mehreren Sparten nutzen oder an andere Spieler vermieten.
 
 Fahrzeuge haben **Verschleiß** und **Wartungsintervalle**. Ein ausgefallener Saugbagger mitten in einer Großlage tut weh.
 
@@ -175,8 +300,9 @@ Jeder Stützpunkt hat ein **Lager**. Aufträge verbrauchen Material (Kabel, Rohr
 ## 9. Reputation & Progression
 
 - **Reputation je Auftraggeber** (Stadtwerke, Telekom-Netzbetreiber, Straßenbauamt …) schaltet bessere Verträge frei.
-- **Firmenstufe** (Handwerksbetrieb → Regionaler Dienstleister → Infrastrukturkonzern) schaltet Sparten, Fahrzeuge und Ausschreibungsgrößen frei.
-- **Zertifizierungen** (z. B. „Arbeiten unter Spannung“, „Gasnetz-Fachbetrieb“) sind Voraussetzung für hochwertige Aufträge und erfordern qualifiziertes Personal.
+- **Befähigungen statt Level:** Welche Auftragsstufen verfügbar sind, ergibt sich aus der Qualifikation des Personals und dem Fuhrpark (siehe 5.6), nicht aus einem abstrakten Erfahrungspunkte-Level.
+- **Firmenstufe** (Handwerksbetrieb → Regionaler Dienstleister → Infrastrukturkonzern) ergibt sich aus Umsatz und Zahl der Stützpunkte. Sie schaltet neue Sparten und größere Ausschreibungen frei.
+- **Zertifizierungen** (z. B. „Arbeiten unter Spannung“, „Netzbau-Fachbetrieb“, „Gas-Fachbetrieb“) sind Voraussetzung für Aufträge ab Stufe 4. Sie verlangen eine Mindestzahl qualifizierter Mitarbeiter, Referenzaufträge und regelmäßige Auffrischung: Verlässt eine Fachkraft die Firma, kann das Zertifikat ruhen.
 
 ## 10. Multiplayer
 
@@ -219,9 +345,9 @@ Jeder Stützpunkt hat ein **Lager**. Aufträge verbrauchen Material (Kabel, Rohr
 ## 15. Roadmap
 
 **MVP (Prototyp, Einzelspieler):**
-- Eine Stadt, eine Sparte (Elektro/Straßenbeleuchtung)
-- Auftragsbörse + 1 Rahmenvertrag
-- 3 Fahrzeugtypen, 4 Qualifikationen, Schichten ohne Erschöpfung
+- Eine Stadt, eine Sparte (Elektro), Auftragsstufen 1–3 inkl. Trafostation mit zwei Wegen
+- Auftragsbörse mit gesperrten Vorschau-Aufträgen + 1 Rahmenvertrag
+- 4 Fahrzeugtypen (Transporter, Hubarbeitsbühne, Kabelmesswagen, Netzersatzanlage), Ausbildungsweg Monteur → Elektrofachkraft → Schaltberechtigung, Schichten ohne Erschöpfung
 - Phasen + eine Wendung pro Auftragstyp
 - Gantt-Disposition, einfache Wirtschaft (Löhne, Vergütung, Strafen)
 
