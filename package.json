@@ -1,0 +1,14 @@
+{
+  "name": "hubwagen-erp",
+  "version": "1.0.0",
+  "description": "Webbasierte ERP-/CRM-Lösung für Einzelunternehmer im Bereich Hubwagen-Wartung und UVV-Prüfung",
+  "main": "server.js",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "demo": "node --disable-warning=ExperimentalWarning server.js --demo",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "license": "UNLICENSED"
+}

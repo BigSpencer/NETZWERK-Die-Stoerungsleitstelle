@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14213d">
+  <title>Hubwagen-ERP</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <img src="icon.svg" alt="" width="34" height="34">
+        <div><strong id="brand-name">Hubwagen-ERP</strong><small>Service · Prüfung · Wartung</small></div>
+      </div>
+      <nav id="nav">
+        <a href="#/" data-nav="dashboard"><span>▦</span>Übersicht</a>
+        <div class="nav-group">CRM</div>
+        <a href="#/kunden" data-nav="kunden"><span>👥</span>Kunden &amp; Interessenten</a>
+        <a href="#/crm" data-nav="crm"><span>☎</span>Kontakte &amp; Wiedervorlagen</a>
+        <div class="nav-group">Service</div>
+        <a href="#/geraete" data-nav="geraete"><span>⛟</span>Geräte &amp; Prüffristen</a>
+        <a href="#/auftraege" data-nav="auftraege"><span>🔧</span>Serviceaufträge</a>
+        <a href="#/kalender" data-nav="kalender"><span>📅</span>Kalender</a>
+        <div class="nav-group">ERP</div>
+        <a href="#/angebote" data-nav="angebote"><span>✉</span>Angebote</a>
+        <a href="#/rechnungen" data-nav="rechnungen"><span>€</span>Rechnungen</a>
+        <a href="#/artikel" data-nav="artikel"><span>⚙</span>Artikel &amp; Lager</a>
+        <div class="nav-group">System</div>
+        <a href="#/einstellungen" data-nav="einstellungen"><span>☰</span>Einstellungen</a>
+        <a href="#" id="logout"><span>⏻</span>Abmelden</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn" id="menu-btn" aria-label="Menü">☰</button>
+        <form id="global-search" class="search" autocomplete="off">
+          <input type="search" id="global-q" placeholder="Suche: Kunde, Seriennummer, Auftrag, Rechnung …">
+        </form>
+        <div class="quick">
+          <a class="btn btn-accent" href="#/auftraege/neu">+ Auftrag</a>
+        </div>
+      </header>
+      <main id="view" class="view"></main>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="main.js"></script>
+</body>
+</html>
