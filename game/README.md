@@ -20,6 +20,7 @@ Beim ersten Start wählst du auf der Karte oder aus einer Liste mit rund 70 deut
 | Bereich | Umfang |
 |---|---|
 | Standort | Freie Wahl: ca. 70 Städte (Einsatzradius nach Stadtgröße) oder ein eigenes Gebiet per Klick, Betriebshof frei platzierbar |
+| Straßennetz | Wird beim Gründen einmalig von OpenStreetMap (Overpass-API) geladen und im Browser gespeichert. Fahrzeuge fahren echte Routen (A*, Einbahnstraßen, Tempo je Straßenklasse), Aufträge liegen an echten Straßen mit echten Straßennamen |
 | Sparte | Elektro |
 | Auftragsstufen | Stufe 1–3: Straßenlaterne, Unfallleuchte, Straßenzug, Hausanschluss, Kabelverteilerschrank, Trafostation, Kabelfehler, Folgeauftrag Trafo-Instandsetzung |
 | Zwei Wege | Trafostation: **Schaltberechtigung** (volle Vergütung) **oder** **Notstrom-Lkw** (60 %, Folgeauftrag geht evtl. an die Konkurrenz). Kabelfehler: **Messwagen** oder langsames **Aufgraben** |
@@ -43,6 +44,7 @@ Beim ersten Start wählst du auf der Karte oder aus einer Liste mit rund 70 deut
 |---|---|
 | `js/data.js` | Alle Spieldaten und Balancing-Werte (Aufträge, Fahrzeuge, Qualifikationen, Verträge) |
 | `js/game.js` | Simulation und Spiellogik (1 Schritt = 1 Spielminute) |
+| `js/roads.js` | Straßennetz laden (Overpass), zwischenspeichern (IndexedDB), Routing (A*) |
 | `js/map.js` | Kartenansicht (Leaflet) |
 | `js/ui.js` | Oberfläche, Dialoge, Zeitleiste |
 | `js/main.js` | Start und Hauptschleife |
@@ -52,6 +54,7 @@ Neue Auftragsarten lassen sich allein über `JOB_TYPES` in `data.js` ergänzen.
 
 ## Bekannte Grenzen des Prototyps
 
-- Fahrzeuge fahren Luftlinie (mit Umwegfaktor), kein echtes Straßenrouting
+- Ist der Overpass-Server nicht erreichbar (z. B. in der claude.ai-Vorschau), fahren Fahrzeuge Luftlinie und Aufträge können abseits von Straßen liegen
+- Kein Verkehrsmodell außer pauschalem Berufsverkehr-Aufschlag
 - Noch keine Schichten, Erschöpfung, Material/Lager, Wetter, Ausschreibungen oder Mehrspieler
 - Balancing ist ein erster Wurf

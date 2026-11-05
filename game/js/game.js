@@ -92,6 +92,24 @@ function load() {
   } catch (e) { return false; }
 }
 
+// Nach dem Laden des Straßennetzes: Hof und noch nicht angefahrene Aufträge auf die Straße setzen
+function snapToRoads() {
+  const S = Game.S;
+  if (!S || !Roads.ready()) return;
+  const n = Roads.nearest(S.city.depot);
+  if (n != null) {
+    const d = Roads.coord(n);
+    for (const v of S.vehicles) if (v.state === 'depot') v.pos = d.slice();
+    S.city.depot = d;
+  }
+  for (const j of S.jobs) {
+    if (j.status !== 'offer' && j.status !== 'accepted') continue;
+    const m = Roads.nearest(j.pos);
+    if (m != null) j.pos = Roads.coord(m);
+  }
+  markDirty();
+}
+
 // ---------- Personal ----------
 function makePerson(level) {
   const exp = { 1: level >= 2 ? rndi(8, 20) : 0, 2: level >= 3 ? rndi(6, 15) : 0, 3: 0 };
@@ -178,10 +196,33 @@ function sellVehicle(id) {
   S.vehicles = S.vehicles.filter(x => x.id !== id);
   notify(`${v.name} für ${fmtEur(val)} verkauft.`, 'info');
 }
+// Index des Wegabschnitts, auf dem sich das Fahrzeug zur Zeit t befindet
+function tripSegment(trip, t) {
+  const T = trip.times;
+  let lo = 0, hi = T.length - 1;
+  while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (T[mid] <= t) lo = mid; else hi = mid; }
+  return lo;
+}
 function vehiclePosAt(v, t) {
-  if (!v.trip) return v.pos;
-  const f = clamp((t - v.trip.t0) / Math.max(1, v.trip.t1 - v.trip.t0), 0, 1);
-  return lerpPos(v.trip.from, v.trip.to, f);
+  const trip = v.trip;
+  if (!trip) return v.pos;
+  if (trip.path) {
+    const P = trip.path, T = trip.times;
+    if (t <= T[0]) return P[0];
+    if (t >= T[T.length - 1]) return P[P.length - 1];
+    const i = tripSegment(trip, t);
+    return lerpPos(P[i], P[i + 1], clamp((t - T[i]) / Math.max(1e-6, T[i + 1] - T[i]), 0, 1));
+  }
+  const f = clamp((t - trip.t0) / Math.max(1, trip.t1 - trip.t0), 0, 1);
+  return lerpPos(trip.from, trip.to, f);
+}
+// Noch zu fahrender Weg (für die Linie auf der Karte)
+function tripRemaining(v, t) {
+  const trip = v.trip;
+  if (!trip) return [];
+  const pos = vehiclePosAt(v, t);
+  if (!trip.path) return [pos, trip.to];
+  return [pos, ...trip.path.slice(tripSegment(trip, t) + 1)];
 }
 function travelFactor(t) {
   const h = hourOf(t);
@@ -189,9 +230,29 @@ function travelFactor(t) {
   if (h >= 22 || h < 5) return 0.85;
   return 1;
 }
-function travelMin(from, to, speed, fromDepot) {
+// Plant eine Fahrt: mit Straßennetz entlang echter Straßen, sonst Luftlinie mit Umwegfaktor
+function planTrip(from, to, speed, fromDepot, t0) {
+  const aus = fromDepot ? 3 : 0;          // Ausrückzeit am Hof
+  const tf = travelFactor(t0);
+  if (Roads.ready()) {
+    const r = Roads.route(Roads.nearest(from), Roads.nearest(to));
+    if (r) {
+      const drive = r.sec / 60 * 1.2 * (38 / speed) * tf;   // 1,2 = Ampeln, Abbiegen, Parken
+      const dur = Math.max(1, Math.round(drive + aus));
+      const rd = x => Math.round(x * 1e5) / 1e5;
+      const path = [from.slice(), ...r.nodes.map(n => Roads.coord(n).map(rd)), to.slice()];
+      const cum = [0, ...r.cum, r.sec];
+      const times = cum.map(c => Math.round((t0 + aus + (r.sec ? c / r.sec : 1) * (dur - aus)) * 100) / 100);
+      return { from: from.slice(), to: to.slice(), t0, t1: t0 + dur, path, times };
+    }
+  }
   const km = haversine(from, to) * 1.35;
-  return Math.max(1, Math.round(km / speed * 60 * travelFactor(Game.S.time) + (fromDepot ? 3 : 0)));
+  const dur = Math.max(1, Math.round(km / speed * 60 * tf + aus));
+  return { from: from.slice(), to: to.slice(), t0, t1: t0 + dur };
+}
+function travelMin(from, to, speed, fromDepot) {
+  const t0 = Game.S.time;
+  return planTrip(from, to, speed, fromDepot, t0).t1 - t0;
 }
 function etaFor(v, pos) { return travelMin(vehiclePosAt(v, Game.S.time), pos, VEHICLE_TYPES[v.type].speed, v.state === 'depot'); }
 function pushHist(v, start, end, kind, label) {
@@ -243,9 +304,11 @@ function randomAddr() { return pick(STREETS) + ' ' + rndi(1, 120); }
 function createJob(typeId, opts = {}) {
   const S = Game.S, T = JOB_TYPES[typeId];
   const base = Math.round(rnd(T.pay[0], T.pay[1]) * (0.85 + S.rep / 333) / 10) * 10;
+  const spot = opts.pos ? null : Roads.randomSpot(city().center, city().radiusKm);
   return {
-    id: uid(), typeId, stage: T.stage, name: T.name, addr: opts.addr || randomAddr(),
-    pos: opts.pos || randomPointAround(city().center, city().radiusKm), base, status: 'offer',
+    id: uid(), typeId, stage: T.stage, name: T.name,
+    addr: opts.addr || (spot ? spot.street + ' ' + rndi(1, 90) : randomAddr()),
+    pos: opts.pos || (spot ? spot.pos : randomPointAround(city().center, city().radiusKm)), base, status: 'offer',
     createdAt: S.time, expiresAt: S.time + (opts.expires || rndi(45, 100)), acceptedAt: null,
     reactionDue: null, completionDue: null, contractId: null, units: [], staffIds: [], wayIdx: null,
     firstArrival: null, reactionMissed: false, phases: null, phaseIdx: 0, phaseEnd: 0,
@@ -288,7 +351,7 @@ function sendHome(v) {
   if (v.state === 'toJob' && v.trip) pushHist(v, v.trip.t0, S.time, 'drive');
   if (v.state === 'atJob') pushHist(v, v.arrivedAt, S.time, 'work', JOB_TYPES[jobById(v.jobId)?.typeId]?.short);
   v.state = 'returning'; v.jobId = null; v.pos = from;
-  v.trip = { from, to: city().depot, t0: S.time, t1: S.time + travelMin(from, city().depot, VEHICLE_TYPES[v.type].speed, false) };
+  v.trip = planTrip(from, city().depot, VEHICLE_TYPES[v.type].speed, false, S.time);
 }
 function removeJob(job) { Game.S.jobs = Game.S.jobs.filter(j => j.id !== job.id); markDirty(); }
 
@@ -360,8 +423,7 @@ function dispatch(job, vehicleIds, staffIds, wayIdx) {
   for (const v of vehicles) {
     const from = vehiclePosAt(v, S.time);
     if (v.state === 'returning' && v.trip) pushHist(v, v.trip.t0, S.time, 'return');
-    const dur = travelMin(from, job.pos, VEHICLE_TYPES[v.type].speed, v.state === 'depot');
-    v.trip = { from, to: job.pos, t0: S.time, t1: S.time + dur };
+    v.trip = planTrip(from, job.pos, VEHICLE_TYPES[v.type].speed, v.state === 'depot', S.time);
     v.state = 'toJob'; v.jobId = job.id; v.pos = from;
     for (const sid of v.crew) {
       const p = staffById(sid); if (!p) continue;

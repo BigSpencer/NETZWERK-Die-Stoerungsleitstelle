@@ -628,9 +628,21 @@ const UI = {
       <div class="actions"><button data-act="found">Betrieb in ${esc(su.sel.name)} gründen</button></div></div>`;
   },
 
-  foundCompany() {
+  async foundCompany() {
     const su = Game.setup; if (!su || !su.sel) return;
     const cfg = { name: su.sel.name, center: su.sel.center, radiusKm: su.sel.radiusKm, depot: su.depot, depotName: 'Betriebshof ' + su.sel.name };
+    this.showLoading(`Straßennetz von ${cfg.name} wird geladen …`);
+    const ok = await Roads.load(cfg);
+    if (!ok) {
+      const choice = await this.ask('Straßennetz nicht geladen',
+        `Das Straßennetz konnte nicht von OpenStreetMap geladen werden (${Roads.error}). Ohne Straßennetz fahren die Fahrzeuge Luftlinie, und Aufträge können auch abseits von Straßen liegen.`,
+        [['retry', 'Erneut versuchen'], ['plain', 'Ohne Straßennetz spielen']]);
+      if (choice === 'retry') return this.foundCompany();
+    } else {
+      const n = Roads.nearest(cfg.depot);
+      if (n != null) cfg.depot = Roads.coord(n);
+    }
+    this.closeModal();
     MapView.endSetup();
     Game.setup = null;
     newGame(cfg);
@@ -640,6 +652,21 @@ const UI = {
     MapView.showCompany();
     this.tab = 'jobs'; this.syncTabs(); this.renderPanel();
     this.showIntro();
+  },
+
+  showLoading(text) {
+    this.openModal({ dismissable: false, render: () => `<div class="loading"><div class="spinner"></div><div><b>${esc(text)}</b>
+      <p class="hint">Die Daten kommen von OpenStreetMap. In Großstädten kann das bis zu einer Minute dauern, danach sind sie im Browser gespeichert.</p></div></div>` });
+  },
+
+  ask(title, text, buttons) {
+    return new Promise(res => {
+      this.openModal({
+        dismissable: false,
+        render: () => `<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="actions right">${buttons.map(([k, l], i) => `<button class="${i ? '' : 'ghost'}" data-m="${k}">${esc(l)}</button>`).join('')}</div>`,
+        onClick: e => { const b = e.target.closest('[data-m]'); if (b) { this.closeModal(); res(b.dataset.m); } },
+      });
+    });
   },
 
   toast(text, kind) {

@@ -135,8 +135,8 @@ const MapView = {
       const el = m.getElement(); if (el) el.style.display = v.state === 'depot' ? 'none' : '';
       let line = this.lines.get(v.id);
       if (v.state === 'toJob' && v.trip) {
-        if (!line) { line = L.polyline([pos, v.trip.to], { color: '#f08c00', weight: 2, dashArray: '5 5', opacity: 0.8 }).addTo(this.map); this.lines.set(v.id, line); }
-        line.setLatLngs([pos, v.trip.to]);
+        if (!line) { line = L.polyline([], { color: '#e8590c', weight: 4, opacity: 0.75 }).addTo(this.map); this.lines.set(v.id, line); }
+        line.setLatLngs(tripRemaining(v, t));
       } else if (line) { line.remove(); this.lines.delete(v.id); }
     }
     for (const [id, m] of this.vehM) if (!vseen.has(id)) { m.remove(); this.vehM.delete(id); }
