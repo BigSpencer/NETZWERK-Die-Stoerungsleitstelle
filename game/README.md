@@ -13,7 +13,7 @@ Kein Build nötig. Entweder:
   # dann http://localhost:8000 öffnen
   ```
 
-Beim ersten Start wählst du auf der Karte oder aus einer Liste mit rund 70 deutschen Städten, wo dein Betrieb sitzt, und setzt per Klick deinen Betriebshof. Für die Kartenbilder (OpenStreetMap-Daten über CARTO) wird eine Internetverbindung gebraucht. Ohne Verbindung, und in der Vorschau auf claude.ai, läuft das Spiel trotzdem, nur ohne Straßenkarte im Hintergrund. Der Spielstand wird automatisch im Browser gespeichert (`localStorage`).
+Beim ersten Start wählst du auf der Karte oder aus einer Liste mit rund 70 deutschen Städten, wo dein Betrieb sitzt, und setzt per Klick deinen Betriebshof. Die Kartenbilder kommen direkt von OpenStreetMap und brauchen eine Internetverbindung. OpenStreetMap liefert sie nur an Seiten aus, die über eine Webadresse laufen (lokaler Webserver oder GitHub Pages); beim Öffnen per Doppelklick bleibt die Karte womöglich leer. Ohne Verbindung, und in der Vorschau auf claude.ai, läuft das Spiel trotzdem, nur ohne Straßenkarte im Hintergrund. Der Spielstand wird automatisch im Browser gespeichert (`localStorage`).
 
 ## Was ist drin
 

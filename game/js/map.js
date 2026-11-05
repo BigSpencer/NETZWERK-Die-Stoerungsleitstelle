@@ -16,10 +16,9 @@ const MapView = {
       return;
     }
     this.map = L.map('map', { zoomControl: true }).setView([51.2, 10.4], 6);
-    // CARTO-Kacheln funktionieren auch beim Öffnen der Datei per Doppelklick (file://)
-    const tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd', maxZoom: 19,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende © <a href="https://carto.com/attributions">CARTO</a>',
+    const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende',
     }).addTo(this.map);
     tiles.on('tileload', () => { this.tilesLoaded++; });
     tiles.on('tileerror', () => { if (!this.tilesLoaded) this.showTileNote(); });
@@ -33,7 +32,7 @@ const MapView = {
     const el = document.createElement('div');
     el.className = 'map-note';
     el.innerHTML = 'Die Kartenbilder können hier nicht geladen werden (z. B. in der Vorschau auf claude.ai oder ohne Internet). '
-      + 'Das Spiel funktioniert trotzdem. Mit Straßenkarte: Spiel herunterladen und <code>game/index.html</code> öffnen.';
+      + 'Das Spiel funktioniert trotzdem. Mit Straßenkarte: über GitHub Pages oder einen lokalen Webserver spielen (siehe README).';
     document.getElementById('map').appendChild(el);
   },
 
