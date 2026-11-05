@@ -6,7 +6,7 @@ Erste spielbare Version des [Spielkonzepts](../docs/spielkonzept.md), umgesetzt 
 
 Kein Build nötig. Entweder:
 
-- `game/index.html` direkt im Browser öffnen, **oder**
+- **Ohne Download:** Auf GitHub oben auf den grünen Knopf **Code → Download ZIP** klicken, die ZIP-Datei entpacken und im Ordner `game` die Datei `index.html` doppelklicken. Das Spiel öffnet sich im Browser. **Oder:**
 - einen lokalen Webserver starten (empfohlen):
   ```bash
   cd game && python3 -m http.server 8000
