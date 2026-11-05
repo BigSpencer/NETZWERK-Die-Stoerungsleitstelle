@@ -344,7 +344,7 @@ Jeder Stützpunkt hat ein **Lager**. Aufträge verbrauchen Material (Kabel, Rohr
 
 ## 15. Roadmap
 
-**MVP (Prototyp, Einzelspieler):**
+**MVP (Prototyp, Einzelspieler):** ✅ umgesetzt als v0.1 in [`game/`](../game/README.md)
 - Eine Stadt, eine Sparte (Elektro), Auftragsstufen 1–3 inkl. Trafostation mit zwei Wegen
 - Auftragsbörse mit gesperrten Vorschau-Aufträgen + 1 Rahmenvertrag
 - 4 Fahrzeugtypen (Transporter, Hubarbeitsbühne, Kabelmesswagen, Netzersatzanlage), Ausbildungsweg Monteur → Elektrofachkraft → Schaltberechtigung, Schichten ohne Erschöpfung

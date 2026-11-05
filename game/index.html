@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NETZWERK – Die Störungsleitstelle</title>
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">⚡ NETZWERK <small>Störungsleitstelle</small></div>
+    <div class="clock-wrap">
+      <span id="clock">–</span>
+      <button id="btn-pause" title="Pause (Leertaste)">❚❚</button>
+      <button data-speed="1" title="1 Sekunde = 1 Spielminute">1×</button>
+      <button data-speed="3">3×</button>
+      <button data-speed="10">10×</button>
+      <button data-speed="30">30×</button>
+    </div>
+    <div class="stats">
+      <span title="Kontostand">💶 <b id="cash">–</b></span>
+      <span title="Offene Forderungen (Zahlungsziel 4 h)">⏳ <b id="recv">–</b></span>
+      <span title="Ruf bei den Auftraggebern (0–100)">⭐ <b id="rep">–</b></span>
+      <span title="Erledigte Aufträge Stufe 1 / 2 / 3">📋 <b id="refs">–</b></span>
+    </div>
+    <div class="menu">
+      <button id="btn-help" title="Anleitung">?</button>
+      <button id="btn-new" title="Neues Spiel">Neu</button>
+    </div>
+  </header>
+
+  <main>
+    <aside id="panel">
+      <nav id="tabs">
+        <button data-tab="jobs">📋 Aufträge <i id="badge-jobs"></i></button>
+        <button data-tab="staff">👷 Personal <i id="badge-staff"></i></button>
+        <button data-tab="fleet">🚐 Fuhrpark</button>
+        <button data-tab="caps">🔓 Befähigung</button>
+        <button data-tab="contracts">🤝 Verträge <i id="badge-contracts"></i></button>
+        <button data-tab="log">📒 Bücher</button>
+      </nav>
+      <div id="panel-body"></div>
+    </aside>
+    <section id="center">
+      <div id="map"></div>
+      <div id="gantt"></div>
+    </section>
+  </main>
+
+  <div id="toasts"></div>
+  <div id="modal-backdrop" hidden><div id="modal"></div></div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
