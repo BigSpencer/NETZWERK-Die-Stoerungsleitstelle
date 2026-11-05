@@ -6,11 +6,13 @@
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const stageBadge = s => `<span class="stage s${s}">S${s}</span>`;
+const spIcons = T => T.sparten.map(sp => `<span class="sp" title="${SPARTEN[sp].name}">${SPARTEN[sp].icon}</span>`).join('');
+const qBadge = p => `<span class="q q${p.level}">${SPARTEN[p.sparte].icon} ${qualShort(p.sparte, p.level)}</span>`;
 const until = (t, cls = '') => `<span class="cd ${cls}" data-until="${t}"></span>`;
 
 function wayLabel(w) {
   const parts = [];
-  for (const lvl of Object.keys(w.staff).map(Number).sort((a, b) => b - a)) parts.push(`${w.staff[lvl]}× ${QUALS[lvl].short}`);
+  for (const k of sortedKeys(w.staff)) parts.push(`${w.staff[k]}× ${keyShort(k)}`);
   const vc = countBy(w.vehicles);
   for (const t in vc) parts.push(`${vc[t] > 1 ? vc[t] + '× ' : ''}${VEHICLE_TYPES[t].short}`);
   let s = parts.join(' + ');
@@ -81,7 +83,7 @@ const UI = {
     const cash = $('#cash'); cash.textContent = fmtEur(S.cash); cash.classList.toggle('neg', S.cash < 0);
     $('#recv').textContent = fmtEur(sum(S.receivables.map(r => r.amount)));
     $('#rep').textContent = Math.round(S.rep);
-    $('#refs').textContent = `${S.done[1] || 0} / ${S.done[2] || 0} / ${S.done[3] || 0}`;
+    $('#refs').textContent = sum(Object.values(S.done));
     const rs = Roads.ready() ? ['🛣 Straßennetz', 'Routen werden direkt im Browser berechnet.', 'ok']
       : Roads.status === 'loading' ? ['🛣 Netz lädt …', 'Das Straßennetz wird im Hintergrund geladen. Bis dahin kommen Routen vom Routing-Server.', 'warn']
       : Osrm.enabled() ? ['🛣 Routing-Server', 'Routen kommen vom öffentlichen OSRM-Server.', 'warn']
@@ -130,8 +132,11 @@ const UI = {
       case 'c-cancel': this.confirm('Vertrag kündigen?', 'Laufende Vertragsaufträge bleiben bestehen. Ruf −5.', () => cancelContract(d.cid)); break;
       case 'set-pause': Game.S.settings.pauseOnDecision = !Game.S.settings.pauseOnDecision; break;
       case 'tab': this.tab = d.tab; this.syncTabs(); break;
+      case 'caps-sp': this.capsSp = d.sp; break;
+      case 'open-dept': { const D = SPARTEN[d.sp]; this.confirm(`Abteilung ${D.name} gründen?`, `Kosten: ${fmtEur(D.cost)}. Danach kannst du Personal dieser Sparte einstellen und ihre Spezialfahrzeuge kaufen.`, () => openDept(d.sp)); break; }
       case 'pick-city': this.setupPick(CITIES[Number(d.idx)]); return;
       case 'found': this.foundCompany(); return;
+      case 'pick-sp': Game.setup.sparte = d.sp; this.renderSetupSel(); return;
     }
     markDirty();
   },
@@ -170,12 +175,12 @@ const UI = {
       extra = `<div class="req">Benötigt: ${T.ways.map(w => (T.ways.length > 1 ? `<b>${esc(w.name)}:</b> ` : '') + wayLabel(w)).join('<br><span class="or">oder</span> ')}</div>`;
       if (locked) {
         extra += `<div class="lock">🔒 Dir fehlt: ${T.ways.map(w => esc(wayMissing(w).join(' + '))).join(' <b>oder</b> ')}</div>`;
-        actions = `<button class="ghost" data-act="tab" data-tab="caps">Befähigungen ansehen</button>`;
+        actions = `<button class="ghost" data-act="tab" data-tab="caps">Sparten ansehen</button>`;
       } else {
         actions = `<button data-act="accept" data-id="${j.id}">Annehmen</button><button class="ghost" data-act="decline" data-id="${j.id}">Ablehnen</button>`;
       }
       return `<div class="card job ${locked ? 'locked' : ''}${hl}" data-card="${j.id}">
-        <div class="card-h">${stageBadge(j.stage)}<b data-act="focus" data-id="${j.id}" class="link">${esc(j.name)}</b><span class="pay">${fmtEur(j.base)}</span></div>
+        <div class="card-h">${stageBadge(j.stage)}${spIcons(T)}<b data-act="focus" data-id="${j.id}" class="link">${esc(j.name)}</b><span class="pay">${fmtEur(j.base)}</span></div>
         <div class="sub">${esc(j.addr)}</div><div class="meta">${meta}</div>${extra}<div class="actions">${actions}</div></div>`;
     }
     const due = `Reaktion: ${j.firstArrival != null ? '<span class="ok">✓ vor Ort</span>' : until(j.reactionDue)} · Erledigung: ${until(j.completionDue)}`;
@@ -211,7 +216,7 @@ const UI = {
     const units = j.units.map(id => vehicleById(id)).filter(v => v && v.jobId === j.id).map(v => esc(v.name)).join(', ');
     const way = j.wayIdx != null && T.ways.length > 1 ? ` · Weg: ${esc(getWay(j).name)}` : '';
     return `<div class="card job active${hl}" data-card="${j.id}">
-      <div class="card-h">${stageBadge(j.stage)}<b data-act="focus" data-id="${j.id}" class="link">${esc(j.name)}</b><span class="pay">${fmtEur(j.base)}</span></div>
+      <div class="card-h">${stageBadge(j.stage)}${spIcons(T)}<b data-act="focus" data-id="${j.id}" class="link">${esc(j.name)}</b><span class="pay">${fmtEur(j.base)}</span></div>
       <div class="sub">${esc(j.addr)} ${contract}</div>
       <div class="meta">${status}</div><div class="meta">${due}</div>${extra}
       ${units ? `<div class="meta">Einheiten: ${units}${way}</div>` : ''}
@@ -241,28 +246,34 @@ const UI = {
     const S = Game.S;
     const wages = sum(S.staff.map(p => p.wage));
     let h = `<h3>Mitarbeiter <small>${S.staff.length} · ${fmtEur(wages)}/h</small></h3>`;
-    for (const p of [...S.staff].sort((a, b) => b.level - a.level)) {
-      const info = trainingInfo(p);
-      let tr = '';
-      if (p.state === 'training') tr = `<div class="meta">🎓 ${esc(TRAININGS[p.trainingTo].name)} – fertig in ${until(p.trainingUntil)}</div>`;
-      else if (info) {
-        const pct = clamp(info.have / info.tr.needCount * 100, 0, 100);
-        tr = `<div class="train"><div class="meta">Nächste Stufe: <b>${esc(info.tr.name)}</b> · ${info.tr.hours} h · ${fmtEur(info.tr.cost)}</div>
-          <div class="meta">Praxis: ${info.have}/${info.tr.needCount} Aufträge Stufe ${info.tr.needStage}</div>
-          <div class="bar small"><div style="width:${pct}%"></div></div>
-          <button data-act="train" data-id="${p.id}" ${info.ok ? '' : 'disabled'}>Weiterbilden</button></div>`;
-      } else tr = '<div class="meta">Höchste Qualifikation erreicht.</div>';
-      h += `<div class="card"><div class="card-h"><span class="q q${p.level}">${QUALS[p.level].short}</span><b>${esc(p.name)}</b><span class="pay">${fmtEur(p.wage)}/h</span></div>
-        <div class="meta">${stateLabelStaff(p)} · Erfahrung S1: ${p.done[1] || 0} · S2: ${p.done[2] || 0} · S3: ${p.done[3] || 0}</div>${tr}
-        ${p.state === 'depot' ? `<div class="actions"><button class="ghost small" data-act="fire" data-id="${p.id}">Entlassen</button></div>` : ''}</div>`;
+    for (const sp of SPARTE_KEYS) {
+      const list = S.staff.filter(p => p.sparte === sp).sort((a, b) => b.level - a.level);
+      if (!list.length) continue;
+      h += `<h4 class="grp">${SPARTEN[sp].icon} ${esc(SPARTEN[sp].name)} <small>${list.length}</small></h4>`;
+      for (const p of list) {
+        const info = trainingInfo(p);
+        let tr = '';
+        if (p.state === 'training') tr = `<div class="meta">🎓 ${esc(SPARTEN[p.sparte].trainings[p.trainingTo].name)} – fertig in ${until(p.trainingUntil)}</div>`;
+        else if (info) {
+          const pct = clamp(info.have / info.tr.needCount * 100, 0, 100);
+          tr = `<div class="train"><div class="meta">Nächste Stufe: <b>${esc(info.tr.name)}</b> · ${info.tr.hours} h · ${fmtEur(info.tr.cost)}</div>
+            <div class="meta">Praxis: ${info.have}/${info.tr.needCount} Aufträge Stufe ${info.tr.needStage}</div>
+            <div class="bar small"><div style="width:${pct}%"></div></div>
+            <button data-act="train" data-id="${p.id}" ${info.ok ? '' : 'disabled'}>Weiterbilden</button></div>`;
+        } else tr = '<div class="meta">Höchste Qualifikation erreicht.</div>';
+        h += `<div class="card"><div class="card-h">${qBadge(p)}<b>${esc(p.name)}</b><span class="pay">${fmtEur(p.wage)}/h</span></div>
+          <div class="meta">${stateLabelStaff(p)} · Erfahrung S1: ${p.done[1] || 0} · S2: ${p.done[2] || 0} · S3: ${p.done[3] || 0}</div>${tr}
+          ${p.state === 'depot' ? `<div class="actions"><button class="ghost small" data-act="fire" data-id="${p.id}">Entlassen</button></div>` : ''}</div>`;
+      }
     }
     h += `<h3>Bewerber <small>neue täglich um 06:00</small></h3>`;
     if (!S.market.candidates.length) h += '<p class="empty">Aktuell keine Bewerbungen.</p>';
     for (const c of S.market.candidates) {
-      h += `<div class="card"><div class="card-h"><span class="q q${c.level}">${QUALS[c.level].short}</span><b>${esc(c.name)}</b><span class="pay">${fmtEur(c.wage)}/h</span></div>
-        <div class="meta">${QUALS[c.level].name} · Erfahrung S1: ${c.done[1]} · S2: ${c.done[2]}${c.fee ? ` · Vermittlung ${fmtEur(c.fee)}` : ''}</div>
+      h += `<div class="card"><div class="card-h">${qBadge(c)}<b>${esc(c.name)}</b><span class="pay">${fmtEur(c.wage)}/h</span></div>
+        <div class="meta">${esc(qualName(c.sparte, c.level))} · Erfahrung S1: ${c.done[1]} · S2: ${c.done[2]}${c.fee ? ` · Vermittlung ${fmtEur(c.fee)}` : ' · ohne Vermittlungsgebühr'}</div>
         <div class="actions"><button data-act="hire" data-id="${c.id}" ${S.cash >= c.fee ? '' : 'disabled'}>Einstellen</button></div></div>`;
     }
+    h += `<p class="hint">Bewerber gibt es nur für Sparten, in denen du eine Abteilung hast. Neue Abteilungen gründest du im Reiter „Sparten“.</p>`;
     return h;
   },
 
@@ -277,35 +288,61 @@ const UI = {
         ${v.state === 'depot' ? `<div class="actions"><button class="ghost small" data-act="sell" data-id="${v.id}">Verkaufen (${fmtEur(T.price * 0.5)})</button></div>` : ''}</div>`;
     }
     h += '<h3>Fahrzeuge kaufen</h3>';
-    for (const type in VEHICLE_TYPES) {
-      const T = VEHICLE_TYPES[type];
-      const uses = Object.values(JOB_TYPES).filter(J => J.ways.some(w => w.vehicles.includes(type)) || (J.twist?.options || []).some(o => o.needVehicle === type));
-      h += `<div class="card"><div class="card-h"><span class="vicon">${T.icon}</span><b>${esc(T.name)}</b><span class="pay">${fmtEur(T.price)}</span></div>
-        <div class="meta">${T.seats} Sitze · ${T.speed} km/h · Unterhalt ${fmtEur(T.upkeep)}/Tag</div>
-        <div class="req">Nötig für: ${uses.map(J => `${stageBadge(J.stage)} ${esc(J.short)}`).join(' ')}</div>
-        <div class="actions"><button data-act="buy" data-type="${type}" ${S.cash >= T.price ? '' : 'disabled'}>Kaufen</button></div></div>`;
+    const groups = [[null, '🧰 Allgemein (alle Sparten)'], ...S.depts.map(sp => [sp, `${SPARTEN[sp].icon} ${SPARTEN[sp].name}`])];
+    for (const [sp, title] of groups) {
+      h += `<h4 class="grp">${esc(title)}</h4>`;
+      for (const type in VEHICLE_TYPES) {
+        const T = VEHICLE_TYPES[type];
+        if (T.sparte !== sp) continue;
+        const uses = Object.values(JOB_TYPES).filter(J => J.weight > 0 && (J.ways.some(w => w.vehicles.includes(type)) || (J.twist?.options || []).some(o => o.needVehicle === type)));
+        h += `<div class="card"><div class="card-h"><span class="vicon">${T.icon}</span><b>${esc(T.name)}</b><span class="pay">${fmtEur(T.price)}</span></div>
+          <div class="meta">${T.seats} Sitze · ${T.speed} km/h · Unterhalt ${fmtEur(T.upkeep)}/Tag</div>
+          <div class="req">Nötig für: ${uses.map(J => `${stageBadge(J.stage)}${spIcons(J)} ${esc(J.short)}`).join(' · ')}</div>
+          <div class="actions"><button data-act="buy" data-type="${type}" ${S.cash >= T.price ? '' : 'disabled'}>Kaufen</button></div></div>`;
+      }
     }
+    const others = SPARTE_KEYS.filter(sp => !hasDept(sp));
+    if (others.length) h += `<p class="hint">Weitere Spezialfahrzeuge gibt es mit den Abteilungen ${others.map(sp => SPARTEN[sp].icon + ' ' + SPARTEN[sp].name).join(', ')}.</p>`;
     return h;
   },
 
   renderCaps() {
     const S = Game.S;
-    let h = `<h3>Befähigungen deines Betriebs</h3>
-      <p class="hint">Welche Aufträge du annehmen kannst, hängt von den <b>Qualifikationen</b> deiner Leute und deinem <b>Fuhrpark</b> ab. Manche Aufträge haben zwei Wege – Ausbildung <i>oder</i> Spezialfahrzeug.</p>
-      <div class="refs">Erledigte Aufträge (Referenzen): ${[1, 2, 3].map(s => `${stageBadge(s)} ${S.done[s] || 0}`).join(' ')}</div>`;
-    for (const st of [1, 2, 3]) {
-      h += `<h3>Stufe ${st}</h3>`;
-      for (const id in JOB_TYPES) {
-        const T = JOB_TYPES[id];
-        if (T.stage !== st) continue;
-        const ways = T.ways.map(w => {
-          const ok = wayOwnedOk(w);
-          return `<div class="way-line ${ok ? 'ok' : 'no'}">${ok ? '✓' : '🔒'} ${T.ways.length > 1 ? `<b>${esc(w.name)}:</b> ` : ''}${wayLabel(w)}${ok ? '' : `<br><small>fehlt: ${esc(wayMissing(w).join(' + '))}</small>`}</div>`;
-        }).join('<span class="or">oder</span>');
-        h += `<div class="card ${acceptableWays(T).length ? '' : 'locked'}"><div class="card-h">${stageBadge(T.stage)}<b>${esc(T.name)}</b><span class="pay">${fmtEur(T.pay[0])}–${fmtEur(T.pay[1])}</span></div>${ways}
-          ${T.weight === 0 ? '<div class="meta">Nur als Folgeauftrag nach einer Notstrom-Überbrückung.</div>' : ''}</div>`;
-      }
+    const sel = this.capsSp || S.depts[0];
+    const chips = [...SPARTE_KEYS.map(sp => `<button class="chip ${sel === sp ? 'active' : ''} ${hasDept(sp) ? 'own' : ''}" data-act="caps-sp" data-sp="${sp}">${SPARTEN[sp].icon} ${esc(SPARTEN[sp].name)}</button>`),
+      `<button class="chip ${sel === 'X' ? 'active' : ''}" data-act="caps-sp" data-sp="X">🔗 Kombiniert</button>`].join('');
+    let h = `<h3>Sparten & Befähigungen</h3>
+      <p class="hint">Du entscheidest frei, welche Sparte du als Nächstes aufbaust. Eine <b>Abteilung</b> schaltet Bewerber und Spezialfahrzeuge frei. Welche Aufträge du annehmen kannst, hängt dann von <b>Qualifikationen</b> und <b>Fuhrpark</b> ab.</p>
+      <div class="chips">${chips}</div>`;
+    const jobCard = T => {
+      const ways = T.ways.map(w => {
+        const ok = wayOwnedOk(w);
+        return `<div class="way-line ${ok ? 'ok' : 'no'}">${ok ? '✓' : '🔒'} ${T.ways.length > 1 ? `<b>${esc(w.name)}:</b> ` : ''}${wayLabel(w)}${ok ? '' : `<br><small>fehlt: ${esc(wayMissing(w).join(' + '))}</small>`}</div>`;
+      }).join('<span class="or">oder</span>');
+      return `<div class="card ${acceptableWays(T).length ? '' : 'locked'}"><div class="card-h">${stageBadge(T.stage)}${T.sparten.length > 1 ? spIcons(T) : ''}<b>${esc(T.name)}</b><span class="pay">${payRange(T).map(fmtEur).join('–')}</span></div>${ways}
+        ${T.weight === 0 ? '<div class="meta">Nur als Folgeauftrag nach einer Überbrückung.</div>' : ''}</div>`;
+    };
+    if (sel === 'X') {
+      h += `<div class="card dept"><b>🔗 Spartenübergreifende Aufträge</b><div class="meta">Diese Aufträge brauchen Fachleute aus mehreren Abteilungen gleichzeitig. Sie sind gut bezahlt und Grundlage für den Rahmenvertrag „Infrastruktur-Störungen“.</div></div>`;
+      for (const st of [2, 3]) for (const id in JOB_TYPES) { const T = JOB_TYPES[id]; if (T.sparten.length > 1 && T.stage === st) h += jobCard(T); }
+      return h;
     }
+    const D = SPARTEN[sel];
+    const staffN = S.staff.filter(p => p.sparte === sel).length;
+    const refs = [1, 2, 3].map(st => `${stageBadge(st)} ${S.done[sel + st] || 0}`).join(' ');
+    h += `<div class="card dept ${hasDept(sel) ? 'own' : ''}"><div class="card-h"><b>${D.icon} Abteilung ${esc(D.name)}</b>${hasDept(sel) ? '<span class="tag ok">aktiv</span>' : `<span class="pay">${fmtEur(D.cost)}</span>`}</div>
+      <div class="meta">${esc(D.desc)}</div>
+      <div class="meta">Qualifikationen: ${[1, 2, 3].map(l => esc(qualName(sel, l))).join(' → ')}</div>
+      <div class="meta">Spezialfahrzeuge: ${Object.values(VEHICLE_TYPES).filter(v => v.sparte === sel).map(v => v.icon + ' ' + esc(v.short)).join(', ')}</div>
+      ${hasDept(sel) ? `<div class="meta">${staffN} Mitarbeiter · Referenzen: ${refs}</div>`
+        : `<div class="meta">Bei Gründung stehen 2 Bewerber ohne Vermittlungsgebühr bereit.</div><div class="actions"><button data-act="open-dept" data-sp="${sel}" ${S.cash >= D.cost ? '' : 'disabled'}>Abteilung gründen</button></div>`}</div>`;
+    for (const st of [1, 2, 3]) {
+      const list = Object.values(JOB_TYPES).filter(T => T.stage === st && T.sparten.length === 1 && T.sparten[0] === sel);
+      if (!list.length) continue;
+      h += `<h3>Stufe ${st}</h3>` + list.map(jobCard).join('');
+    }
+    const combo = Object.values(JOB_TYPES).filter(T => T.sparten.length > 1 && T.sparten.includes(sel));
+    if (combo.length) h += `<h3>Zusammen mit anderen Sparten</h3>` + combo.map(jobCard).join('');
     return h;
   },
 
@@ -318,7 +355,7 @@ const UI = {
       const label = { locked: 'Noch nicht angeboten', offered: 'Angebot liegt vor', active: 'Aktiv', terminated: 'Gekündigt' }[c.status];
       let body = `<div class="meta">${esc(D.desc)}</div>
         <div class="meta">Pauschale ${fmtEur(D.daily)}/Tag · Vergütung +${Math.round((D.payFactor - 1) * 100)} % · Mindest-Fristtreue ${Math.round(D.sla * 100)} %</div>
-        <div class="meta">Auftragsarten: ${D.jobTypes.map(t => `${stageBadge(JOB_TYPES[t].stage)} ${esc(JOB_TYPES[t].short)}`).join(' ')}</div>`;
+        <div class="meta">Auftragsarten: ${D.jobTypes.map(t => `${stageBadge(JOB_TYPES[t].stage)}${spIcons(JOB_TYPES[t])} ${esc(JOB_TYPES[t].short)}`).join(' · ')}</div>`;
       if (c.status !== 'active') body += '<ul class="checks">' + reqs.map(r => `<li class="${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✗'} ${esc(r.label)} <small>(${r.have}/${r.need})</small></li>`).join('') + '</ul>';
       if (c.status === 'active') {
         const rate = c.results.length ? c.results.filter(Boolean).length / c.results.length : 1;
@@ -329,7 +366,7 @@ const UI = {
       }
       if (c.status === 'offered') body += `<div class="actions"><button data-act="c-accept" data-cid="${id}" ${reqs.every(r => r.ok) ? '' : 'disabled'}>Vertrag abschließen</button></div>`;
       if (c.status === 'terminated') body += '<p class="lock">Der Auftraggeber arbeitet nicht mehr mit dir zusammen.</p>';
-      h += `<div class="card"><div class="card-h"><b>${esc(D.name)}</b><span class="tag">${label}</span></div><div class="sub">${esc(D.client)}</div>${body}</div>`;
+      h += `<div class="card"><div class="card-h"><b>${D.sparte ? SPARTEN[D.sparte].icon : '🔗'} ${esc(D.name)}</b><span class="tag">${label}</span></div><div class="sub">${esc(D.client)}</div>${body}</div>`;
     }
     return h;
   },
@@ -415,8 +452,10 @@ const UI = {
       render: () => `<h2>⚠ ${esc(tw.title)}</h2><div class="sub">${stageBadge(job.stage)} ${esc(job.name)} · ${esc(job.addr)}</div>
         <p>${esc(tw.text)}</p><p class="meta">Erledigungsfrist: ${until(job.completionDue)} – die Uhr läuft weiter.</p>
         <div class="options">${tw.options.map((o, i) => {
-          const dis = o.needVehicle && !owned.has(o.needVehicle);
-          return `<button class="option" data-opt="${i}" ${dis ? 'disabled' : ''}><b>${esc(o.label)}</b><small>${esc(o.info || '')}${dis ? ` – 🔒 kein ${esc(VEHICLE_TYPES[o.needVehicle].name)} im Fuhrpark` : ''}</small></button>`;
+          const noVeh = o.needVehicle && !owned.has(o.needVehicle);
+          const noStaff = o.needStaff && !staffAssign(Game.S.staff, o.needStaff).ok;
+          const why = noVeh ? `kein ${VEHICLE_TYPES[o.needVehicle].name} im Fuhrpark` : noStaff ? `kein Personal: ${Object.keys(o.needStaff).map(keyLabel).join(', ')}` : '';
+          return `<button class="option" data-opt="${i}" ${why ? 'disabled' : ''}><b>${esc(o.label)}</b><small>${esc(o.info || '')}${why ? ` – 🔒 ${esc(why)}` : ''}</small></button>`;
         }).join('')}</div>`,
       onClick: e => {
         const b = e.target.closest('[data-opt]'); if (!b || b.disabled) return;
@@ -473,7 +512,8 @@ const UI = {
       const etas = selV.map(v => etaFor(v, job.pos));
       const arr = etas.length ? Math.max(...etas) : null;
       const busyV = Game.S.vehicles.length - avail.length;
-      const depotStaff = availableDepotStaff().sort((a, b) => b.level - a.level);
+      const reqSp = new Set(Object.keys(req.staff).map(k => k[0]));
+      const depotStaff = availableDepotStaff().sort((a, b) => (reqSp.has(b.sparte) - reqSp.has(a.sparte)) || SPARTE_KEYS.indexOf(a.sparte) - SPARTE_KEYS.indexOf(b.sparte) || b.level - a.level);
       const outStaff = Game.S.staff.filter(p => p.state !== 'depot').length;
 
       const waysHtml = reinf ? `<p class="meta">Nachforderung: <b>${wayLabel(req)}</b></p>` : `<div class="ways">${reqs.map((w, i) => `
@@ -484,12 +524,12 @@ const UI = {
         const crew = v.crew.map(id => staffById(id)).filter(Boolean);
         return `<label class="pickrow"><input type="checkbox" data-kind="veh" value="${v.id}" ${st.veh.has(v.id) ? 'checked' : ''}>
           <span class="vicon">${VEHICLE_TYPES[v.type].icon}</span><span class="grow"><b>${esc(v.name)}</b> <small>${VEHICLE_TYPES[v.type].seats} Sitze · ${stateLabelVehicle(v)}</small>
-          ${crew.length ? `<br><small>Besatzung fährt mit: ${crew.map(p => `${esc(p.name)} (${QUALS[p.level].short})`).join(', ')}</small>` : ''}</span>
+          ${crew.length ? `<br><small>Besatzung fährt mit: ${crew.map(p => `${esc(p.name)} (${SPARTEN[p.sparte].icon} ${qualShort(p.sparte, p.level)})`).join(', ')}</small>` : ''}</span>
           <span class="eta">${routeKnown(vehiclePosAt(v, Game.S.time), job.pos) ? '' : '≈ '}${etaFor(v, job.pos)} min</span></label>`;
       }).join('') : '<p class="empty">Kein Fahrzeug verfügbar.</p>';
 
       const staffHtml = depotStaff.length ? depotStaff.map(p => `<label class="pickrow"><input type="checkbox" data-kind="staff" value="${p.id}" ${st.staff.has(p.id) ? 'checked' : ''}>
-          <span class="q q${p.level}">${QUALS[p.level].short}</span><span class="grow">${esc(p.name)}</span><small>${fmtEur(p.wage)}/h</small></label>`).join('')
+          ${qBadge(p)}<span class="grow">${esc(p.name)}</span><small>${fmtEur(p.wage)}/h</small></label>`).join('')
         : '<p class="empty">Niemand am Hof.</p>';
 
       let timing = '';
@@ -547,13 +587,14 @@ const UI = {
     this.openModal({
       dismissable: true,
       render: () => `<h2>NETZWERK – Die Störungsleitstelle</h2>
-        <p>Du leitest einen kleinen <b>Entstörungsdienst für Elektro-Infrastruktur</b> in ${esc(city().name)}. Aufträge kommen von der Auftragsbörse oder später aus Rahmenverträgen – jeder mit <b>Reaktionsfrist</b>, <b>Erledigungsfrist</b> und Vergütung.</p>
+        <p>Du leitest einen kleinen <b>Infrastruktur-Dienstleister</b> in ${esc(city().name)} – gestartet mit der Abteilung ${SPARTEN[Game.S.depts[0]].icon} ${esc(SPARTEN[Game.S.depts[0]].name)}. Aufträge kommen von der Auftragsbörse oder später aus Rahmenverträgen – jeder mit <b>Reaktionsfrist</b>, <b>Erledigungsfrist</b> und Vergütung.</p>
         <ol>
           <li><b>Annehmen:</b> Wähle in der Auftragsbörse einen Auftrag, den dein Betrieb leisten kann.</li>
           <li><b>Disponieren:</b> Wähle Fahrzeuge und Personal. Der Vorschlag passt meist schon.</li>
           <li><b>Entscheiden:</b> Vor Ort kann sich die Lage ändern – Nachtrag, Nachforderung oder Abkürzung?</li>
           <li><b>Kassieren:</b> Pünktlich = Bonus und Ruf. Zu spät = Vertragsstrafe.</li>
-          <li><b>Wachsen:</b> Bilde Monteure weiter, kaufe Spezialfahrzeuge und schalte so wertvollere Aufträge frei – bis zur Trafostation.</li>
+          <li><b>Wachsen:</b> Bilde dein Personal weiter, kaufe Spezialfahrzeuge und schalte wertvollere Aufträge frei.</li>
+          <li><b>Ausbauen:</b> Gründe jederzeit weitere Abteilungen (Reiter „Sparten“). Manche Aufträge brauchen Fachleute aus mehreren Sparten, etwa eine ausgefallene Ampelanlage: Signaltechnik <i>und</i> Elektro.</li>
         </ol>
         <p class="hint">Löhne laufen stündlich, Fahrzeugunterhalt täglich. Bei −25.000 € ist der Betrieb insolvent. Leertaste = Pause. Der Spielstand wird automatisch im Browser gespeichert.</p>
         <div class="actions right"><button data-m="ok">Los geht's</button></div>`,
@@ -580,7 +621,7 @@ const UI = {
   startSetup() {
     this.closeModal();
     Game.S = null;
-    const su = Game.setup = { sel: null, depot: null, query: '' };
+    const su = Game.setup = { sel: null, depot: null, query: '', sparte: 'E' };
     $('#tabs').hidden = true;
     $('#gantt').hidden = true;
     $('#clock').textContent = 'Standortwahl';
@@ -635,7 +676,10 @@ const UI = {
     const d = haversine(su.depot, su.sel.center);
     el.innerHTML = `<div class="card setup-card"><div class="card-h"><b>📍 ${esc(su.sel.name)}</b><span class="tag">Radius ${su.sel.radiusKm} km</span></div>
       <div class="meta">Betriebshof ${d < 0.3 ? 'im Zentrum' : d.toFixed(1).replace('.', ',') + ' km vom Zentrum'} – zum Verschieben in die Karte klicken.</div>
-      <div class="meta">Großes Gebiet = mehr Aufträge in der Nähe anderer, aber längere Anfahrten.</div>
+      <div class="meta">Großes Gebiet = längere Anfahrten.</div>
+      <h4 class="grp">Mit welcher Sparte startest du?</h4>
+      <div class="sp-pick">${SPARTE_KEYS.map(sp => `<button class="spbtn ${su.sparte === sp ? 'active' : ''}" data-act="pick-sp" data-sp="${sp}"><b>${SPARTEN[sp].icon} ${esc(SPARTEN[sp].name)}</b><small>${esc(SPARTEN[sp].desc)}</small></button>`).join('')}</div>
+      <div class="meta">Startpaket: 2 × ${esc(qualName(su.sparte, 1))}, 1 × ${esc(VEHICLE_TYPES[SPARTEN[su.sparte].startVehicle].name)}. Weitere Sparten kannst du jederzeit dazunehmen.</div>
       <div class="actions"><button data-act="found">Betrieb in ${esc(su.sel.name)} gründen</button></div></div>`;
   },
 
@@ -644,7 +688,7 @@ const UI = {
     const cfg = { name: su.sel.name, center: su.sel.center, radiusKm: su.sel.radiusKm, depot: su.depot, depotName: 'Betriebshof ' + su.sel.name };
     MapView.endSetup();
     Game.setup = null;
-    newGame(cfg);
+    newGame(cfg, su.sparte);
     save();
     $('#tabs').hidden = false;
     $('#gantt').hidden = false;

@@ -351,6 +351,8 @@ Jeder Stützpunkt hat ein **Lager**. Aufträge verbrauchen Material (Kabel, Rohr
 - Phasen + eine Wendung pro Auftragstyp
 - Gantt-Disposition, einfache Wirtschaft (Löhne, Vergütung, Strafen)
 
+**v0.2:** ✅ alle sechs Sparten mit eigenen Fahrzeugen und Abteilungen, spartenübergreifende Aufträge, Standortwahl, Straßenrouting
+
 **Beta:**
 - Sparten Gas/Wasser + Verkehrstechnik
 - Material & Lager, Wetter, Reputation

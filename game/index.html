@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NETZWERK – Die Störungsleitstelle</title>
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="css/style.css?v=0.5">
+  <link rel="stylesheet" href="css/style.css?v=0.7">
 </head>
 <body>
   <header id="topbar">
@@ -22,7 +22,7 @@
       <span title="Kontostand">💶 <b id="cash">–</b></span>
       <span title="Offene Forderungen (Zahlungsziel 4 h)">⏳ <b id="recv">–</b></span>
       <span title="Ruf bei den Auftraggebern (0–100)">⭐ <b id="rep">–</b></span>
-      <span title="Erledigte Aufträge Stufe 1 / 2 / 3">📋 <b id="refs">–</b></span>
+      <span title="Erledigte Aufträge insgesamt">📋 <b id="refs">–</b></span>
       <span id="roadstat" class="roadstat"></span>
     </div>
     <div class="menu">
@@ -37,7 +37,7 @@
         <button data-tab="jobs">📋 Aufträge <i id="badge-jobs"></i></button>
         <button data-tab="staff">👷 Personal <i id="badge-staff"></i></button>
         <button data-tab="fleet">🚐 Fuhrpark</button>
-        <button data-tab="caps">🔓 Befähigung</button>
+        <button data-tab="caps">🧭 Sparten</button>
         <button data-tab="contracts">🤝 Verträge <i id="badge-contracts"></i></button>
         <button data-tab="log">📒 Bücher</button>
       </nav>
@@ -53,11 +53,11 @@
   <div id="modal-backdrop" hidden><div id="modal"></div></div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
-  <script src="js/data.js?v=0.5"></script>
-  <script src="js/game.js?v=0.5"></script>
-  <script src="js/roads.js?v=0.5"></script>
-  <script src="js/map.js?v=0.5"></script>
-  <script src="js/ui.js?v=0.5"></script>
-  <script src="js/main.js?v=0.5"></script>
+  <script src="js/data.js?v=0.7"></script>
+  <script src="js/game.js?v=0.7"></script>
+  <script src="js/roads.js?v=0.7"></script>
+  <script src="js/map.js?v=0.7"></script>
+  <script src="js/ui.js?v=0.7"></script>
+  <script src="js/main.js?v=0.7"></script>
 </body>
 </html>

@@ -63,21 +63,22 @@ function earn(amount) { Game.S.cash += amount; Game.S.stats.earned += amount; }
 function changeRep(d) { Game.S.rep = clamp(Game.S.rep + d, 0, 100); }
 
 // ---------- Neues Spiel / Speichern ----------
-function newGame(cityCfg) {
+function newGame(cityCfg, startSparte = 'E') {
   Game.S = {
-    version: 1, city: cityCfg || DEFAULT_CITY, time: 7 * 60, seq: 1, cash: 15000, rep: 50,
-    done: { 1: 0, 2: 0, 3: 0 }, staff: [], vehicles: [], jobs: [], history: [], log: [],
+    version: 2, city: cityCfg || DEFAULT_CITY, depts: [startSparte], time: 7 * 60, seq: 1, cash: 15000, rep: 50,
+    done: {}, staff: [], vehicles: [], jobs: [], history: [], log: [],
     receivables: [], contracts: {}, market: { candidates: [] }, vehCount: {},
     nextOfferAt: 7 * 60 + 3,
     stats: { earned: 0, wages: 0, upkeep: 0, fuel: 0, penalties: 0, invest: 0, training: 0, interest: 0 },
     settings: { pauseOnDecision: true }, gameOver: false,
   };
   for (const id in CONTRACTS) Game.S.contracts[id] = { status: 'locked', results: [], warnings: 0, nextJobAt: 0 };
-  Game.S.staff.push(makePerson(1), makePerson(1));
-  addVehicle('TRANS');
+  Game.S.staff.push(makePerson(startSparte, 1), makePerson(startSparte, 1));
+  addVehicle(SPARTEN[startSparte].startVehicle);
   refreshCandidates();
   for (let i = 0; i < 3; i++) genOffer();
-  notify(`Dein Betrieb in ${city().name} ist eröffnet: 2 Monteure, 1 Transporter. Viel Erfolg!`, 'good');
+  const SP = SPARTEN[startSparte];
+  notify(`Dein Betrieb in ${city().name} ist eröffnet: Abteilung ${SP.icon} ${SP.name}, 2 Mitarbeiter, 1 ${VEHICLE_TYPES[SP.startVehicle].short}. Viel Erfolg!`, 'good');
   markDirty();
 }
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.S)); } catch (e) { /* ignorieren */ } }
@@ -86,7 +87,8 @@ function load() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
     const S = JSON.parse(raw);
-    if (!S || S.version !== 1) return false;
+    if (!S || !(S.version === 1 || S.version === 2)) return false;
+    migrate(S);
     Game.S = S; markDirty();
     return true;
   } catch (e) { return false; }
@@ -110,22 +112,40 @@ function snapToRoads() {
   markDirty();
 }
 
+// Spielstände aus Version 1 (nur Elektro) übernehmen
+function migrate(S) {
+  if (S.version === 1) {
+    S.depts = ['E'];
+    for (const p of [...S.staff, ...S.market.candidates]) p.sparte = 'E';
+    S.done = { E1: S.done[1] || 0, E2: S.done[2] || 0, E3: S.done[3] || 0 };
+    for (const j of S.jobs) if (j.reinforcement) {
+      const st = {}; for (const k in j.reinforcement.staff) st[/^\d$/.test(k) ? 'E' + k : k] = j.reinforcement.staff[k];
+      j.reinforcement.staff = st;
+    }
+    S.version = 2;
+  }
+  for (const id in CONTRACTS) if (!S.contracts[id]) S.contracts[id] = { status: 'locked', results: [], warnings: 0, nextJobAt: 0 };
+  for (const id in S.contracts) if (!CONTRACTS[id]) delete S.contracts[id];
+  S.jobs = S.jobs.filter(j => JOB_TYPES[j.typeId]);
+}
+
 // ---------- Personal ----------
-function makePerson(level) {
+function makePerson(sparte, level) {
   const exp = { 1: level >= 2 ? rndi(8, 20) : 0, 2: level >= 3 ? rndi(6, 15) : 0, 3: 0 };
   return {
-    id: uid(), name: pick(FIRST_NAMES) + ' ' + pick(LAST_NAMES), level,
-    wage: QUALS[level].wage + rndi(-2, 3), done: exp,
+    id: uid(), name: pick(FIRST_NAMES) + ' ' + pick(LAST_NAMES), sparte, level,
+    wage: WAGES[level] + rndi(-2, 3), done: exp,
     state: 'depot', vehicleId: null, trainingUntil: 0, trainingTo: 0,
   };
 }
 function refreshCandidates() {
   const c = [];
-  const n = rndi(2, 4);
+  const depts = Game.S.depts;
+  const n = rndi(2, 3) + depts.length;
   for (let i = 0; i < n; i++) {
     const r = Math.random();
     const lvl = r < 0.08 ? 3 : r < 0.33 ? 2 : 1;
-    const p = makePerson(lvl);
+    const p = makePerson(depts[i % depts.length], lvl);
     p.fee = [0, 400, 1200, 3000][lvl];
     c.push(p);
   }
@@ -140,7 +160,7 @@ function hire(id) {
   spend(p.fee, 'invest');
   delete p.fee;
   S.staff.push(p); S.market.candidates.splice(i, 1);
-  notify(`${p.name} (${QUALS[p.level].name}) eingestellt.`, 'good');
+  notify(`${p.name} (${SPARTEN[p.sparte].icon} ${qualName(p.sparte, p.level)}) eingestellt.`, 'good');
 }
 function severance(p) { return p.wage * 8; }
 function fire(id) {
@@ -151,7 +171,7 @@ function fire(id) {
   notify(`${p.name} hat den Betrieb verlassen.`, 'info');
 }
 function trainingInfo(p) {
-  const tr = TRAININGS[p.level + 1];
+  const tr = SPARTEN[p.sparte].trainings[p.level + 1];
   if (!tr) return null;
   const have = p.done[tr.needStage] || 0;
   return { tr, have, expOk: have >= tr.needCount, ok: have >= tr.needCount && p.state === 'depot' && Game.S.cash >= tr.cost };
@@ -166,8 +186,21 @@ function startTraining(id) {
 function finishTraining(p) {
   const old = p.level;
   p.level = p.trainingTo; p.state = 'depot';
-  p.wage += QUALS[p.level].wage - QUALS[old].wage;
-  notify(`🎓 ${p.name} ist jetzt ${QUALS[p.level].name}!`, 'good');
+  p.wage += WAGES[p.level] - WAGES[old];
+  notify(`🎓 ${p.name} ist jetzt ${qualName(p.sparte, p.level)}!`, 'good');
+}
+
+// ---------- Abteilungen ----------
+const hasDept = sp => Game.S.depts.includes(sp);
+function openDept(sp) {
+  const S = Game.S, D = SPARTEN[sp];
+  if (hasDept(sp)) return;
+  if (S.cash < D.cost) return notify(`Nicht genug Geld für die Abteilung ${D.name} (${fmtEur(D.cost)}).`, 'bad');
+  spend(D.cost, 'invest');
+  S.depts.push(sp);
+  // Gründungspaket: zwei Leute aus der neuen Sparte stehen sofort zur Einstellung bereit
+  S.market.candidates.unshift(Object.assign(makePerson(sp, 1), { fee: 0 }), Object.assign(makePerson(sp, 1), { fee: 0 }));
+  notify(`${D.icon} Abteilung ${D.name} gegründet! Bewerber und Fahrzeuge der Sparte sind jetzt verfügbar.`, 'good');
 }
 
 // ---------- Fuhrpark ----------
@@ -183,6 +216,7 @@ function addVehicle(type) {
 }
 function buyVehicle(type) {
   const T = VEHICLE_TYPES[type];
+  if (T.sparte && !hasDept(T.sparte)) return notify(`${T.name} braucht die Abteilung ${SPARTEN[T.sparte].name}.`, 'bad');
   if (Game.S.cash < T.price) return notify('Nicht genug Geld für ' + T.name + '.', 'bad');
   spend(T.price, 'invest');
   const v = addVehicle(type);
@@ -285,14 +319,17 @@ const availableVehicles = () => Game.S.vehicles.filter(v => v.state === 'depot' 
 const availableDepotStaff = () => Game.S.staff.filter(p => p.state === 'depot');
 
 // ---------- Befähigungen ----------
+// Anforderungsschlüssel nach Stufe absteigend (höchste Qualifikation zuerst besetzen)
+const sortedKeys = req => Object.keys(req).sort((a, b) => parseKey(b).lvl - parseKey(a).lvl);
+const fits = (p, k) => { const { sp, lvl } = parseKey(k); return p.sparte === sp && p.level >= lvl; };
 function staffAssign(pool, req) {
   const avail = [...pool].sort((a, b) => a.level - b.level);
   const used = new Set(), missing = {}, picked = [];
   let ok = true;
-  for (const lvl of Object.keys(req).map(Number).sort((a, b) => b - a)) {
-    for (let k = 0; k < req[lvl]; k++) {
-      const p = avail.find(x => !used.has(x.id) && x.level >= lvl);
-      if (p) { used.add(p.id); picked.push(p); } else { missing[lvl] = (missing[lvl] || 0) + 1; ok = false; }
+  for (const k of sortedKeys(req)) {
+    for (let n = 0; n < req[k]; n++) {
+      const p = avail.find(x => !used.has(x.id) && fits(x, k));
+      if (p) { used.add(p.id); picked.push(p); } else { missing[k] = (missing[k] || 0) + 1; ok = false; }
     }
   }
   return { ok, missing, picked };
@@ -307,15 +344,21 @@ function wayOwnedOk(way) {
 }
 function wayMissing(way) {
   const parts = [];
+  const sps = [...new Set(Object.keys(way.staff).map(k => k[0]))];
+  for (const sp of sps) if (!hasDept(sp)) parts.push(`Abteilung ${SPARTEN[sp].name}`);
   const r = staffAssign(Game.S.staff, way.staff);
-  for (const lvl in r.missing) parts.push(`${r.missing[lvl]}× ${QUALS[lvl].name}`);
+  for (const k in r.missing) if (hasDept(k[0])) parts.push(`${r.missing[k]}× ${keyLabel(k)}`);
   for (const t of vehiclesMissing(Game.S.vehicles.map(v => v.type), way.vehicles)) parts.push(VEHICLE_TYPES[t].name);
   return parts;
 }
 function acceptableWays(T) { return T.ways.map((w, i) => i).filter(i => wayOwnedOk(T.ways[i])); }
-function maxCapableStage() {
+// Höchste Stufe, die eine Sparte bei Einzelaufträgen schon leisten kann
+function capStage(sp) {
   let m = 0;
-  for (const id in JOB_TYPES) { const T = JOB_TYPES[id]; if (T.weight > 0 && acceptableWays(T).length) m = Math.max(m, T.stage); }
+  for (const id in JOB_TYPES) {
+    const T = JOB_TYPES[id];
+    if (T.weight > 0 && T.sparten.length === 1 && T.sparten[0] === sp && acceptableWays(T).length) m = Math.max(m, T.stage);
+  }
   return m;
 }
 function getWay(job) { return JOB_TYPES[job.typeId].ways[job.wayIdx || 0]; }
@@ -325,7 +368,7 @@ function getTwist(job) { const T = JOB_TYPES[job.typeId], w = getWay(job); retur
 function randomAddr() { return pick(STREETS) + ' ' + rndi(1, 120); }
 function createJob(typeId, opts = {}) {
   const S = Game.S, T = JOB_TYPES[typeId];
-  const base = Math.round(rnd(T.pay[0], T.pay[1]) * (0.85 + S.rep / 333) / 10) * 10;
+  const base = Math.round(rnd(T.pay[0], T.pay[1]) * STAGE_PAY[T.stage] * (0.85 + S.rep / 333) / 10) * 10;
   const spot = opts.pos ? null : Roads.randomSpot(city().center, city().radiusKm);
   return {
     id: uid(), typeId, stage: T.stage, name: T.name,
@@ -357,15 +400,29 @@ function spawnJob(typeId, done) {
 
 function genOffer() {
   const S = Game.S;
-  const cap = maxCapableStage();
-  const types = Object.keys(JOB_TYPES).filter(id => JOB_TYPES[id].weight > 0 && JOB_TYPES[id].stage <= cap + 1);
+  const caps = {};
+  for (const sp of S.depts) caps[sp] = capStage(sp);
+  const types = [], weights = new Map();
+  for (const id in JOB_TYPES) {
+    const T = JOB_TYPES[id];
+    if (!T.weight) continue;
+    const owned = T.sparten.filter(sp => hasDept(sp));
+    if (!owned.length) continue;
+    let w;
+    if (owned.length < T.sparten.length) {
+      if (T.stage > 2) continue;
+      w = T.weight * 0.2;                                 // Vorschau: andere Sparte nötig
+    } else {
+      const cap = Math.min(...T.sparten.map(sp => caps[sp]));
+      if (T.stage > cap + 1) continue;
+      if (!acceptableWays(T).length) w = T.weight * 0.45;  // Vorschau: nächste Stufe
+      else w = T.stage < cap ? T.weight * 0.6 : T.weight;
+      if (T.sparten.length > 1) w *= 1.2;
+    }
+    types.push(id); weights.set(id, w);
+  }
   if (!types.length) return;
-  const id = weightedPick(types, t => {
-    const T = JOB_TYPES[t];
-    if (T.stage === cap + 1) return T.weight * 0.45;   // gesperrte Vorschau
-    if (T.stage < cap) return T.weight * 0.6;
-    return T.weight;
-  });
+  const id = weightedPick(types, t => weights.get(t));
   spawnJob(id, job => { Game.S.jobs.push(job); markDirty(); });
 }
 function acceptJob(job) {
@@ -412,8 +469,8 @@ function checkDispatch(req, vehicleIds, staffIds) {
   const have = countBy(vehicles.map(v => v.type)), need = countBy(req.vehicles);
   for (const t in need) items.push({ label: `${need[t] > 1 ? need[t] + '× ' : ''}${VEHICLE_TYPES[t].name}`, ok: (have[t] || 0) >= need[t] });
   const r = staffAssign(staff, req.staff);
-  for (const lvl of Object.keys(req.staff).map(Number).sort((a, b) => b - a)) {
-    items.push({ label: `${req.staff[lvl]}× ${QUALS[lvl].name}${lvl < 3 ? ' (oder höher)' : ''}`, ok: !r.missing[lvl] });
+  for (const k of sortedKeys(req.staff)) {
+    items.push({ label: `${req.staff[k]}× ${SPARTEN[k[0]].icon} ${keyLabel(k)}${parseKey(k).lvl < 3 ? ' (oder höher)' : ''}`, ok: !r.missing[k] });
   }
   const seats = sum(vehicles.map(v => VEHICLE_TYPES[v.type].seats));
   items.push({ label: `Sitzplätze: ${staff.length} / ${seats}`, ok: staff.length <= seats && staff.length > 0 });
@@ -434,9 +491,9 @@ function suggest(req, pos) {
   const depot = availableDepotStaff().sort((a, b) => a.level - b.level || a.wage - b.wage);
   const used = new Set(staff.map(p => p.id));
   const r = staffAssign(staff, req.staff);
-  for (const lvl of Object.keys(r.missing).map(Number).sort((a, b) => b - a)) {
-    for (let k = 0; k < r.missing[lvl]; k++) {
-      const p = depot.find(x => !used.has(x.id) && x.level >= lvl);
+  for (const k of sortedKeys(r.missing)) {
+    for (let n = 0; n < r.missing[k]; n++) {
+      const p = depot.find(x => !used.has(x.id) && fits(x, k));
       if (p) { used.add(p.id); staff.push(p); }
     }
   }
@@ -499,9 +556,9 @@ function estFinish(job, now) {
 function startWork(job) {
   const S = Game.S, T = JOB_TYPES[job.typeId], way = getWay(job);
   let mul = way.searchMul || 1;
-  const crewMax = Math.max(0, ...job.staffIds.map(id => staffById(id)?.level || 0));
-  const reqMax = Math.max(...Object.keys(way.staff).map(Number));
-  const bonus = crewMax > reqMax;
+  // Bonus, wenn jemand in einer beteiligten Sparte höher qualifiziert ist als verlangt
+  const crew = job.staffIds.map(staffById).filter(Boolean);
+  const bonus = Object.keys(way.staff).some(k => { const { sp, lvl } = parseKey(k); return crew.some(p => p.sparte === sp && p.level > lvl); });
   if (bonus) mul *= 0.8;
   job.phases = (way.phases || T.phases).map(d => ({ name: d.name, dur: Math.max(1, Math.round(rnd(d.min, d.max) * (d.search ? mul : 1))) }));
   job.phaseIdx = 0; job.phaseEnd = S.time + job.phases[0].dur; job.status = 'working'; job.workStart = S.time;
@@ -576,7 +633,7 @@ function completeJob(job) {
   else spend(-net);
   S.stats.penalties += penalty;
   changeRep(ok ? (fast ? 2 : 1) : -3);
-  S.done[job.stage] = (S.done[job.stage] || 0) + 1;
+  for (const sp of T.sparten) S.done[sp + job.stage] = (S.done[sp + job.stage] || 0) + 1;
   for (const id of job.staffIds) { const p = staffById(id); if (p) p.done[job.stage] = (p.done[job.stage] || 0) + 1; }
   if (job.contractId) recordSla(job.contractId, ok);
   for (const vid of job.units) { const v = vehicleById(vid); if (v && v.jobId === job.id) sendHome(v); }
@@ -601,9 +658,11 @@ function completeJob(job) {
 // ---------- Rahmenverträge ----------
 function contractReqs(D) {
   const S = Game.S, out = [];
-  for (const st in D.reqs.refs) out.push({ label: `${D.reqs.refs[st]} erledigte Aufträge der Stufe ${st}`, have: S.done[st] || 0, need: D.reqs.refs[st] });
+  const sps = [...new Set([...Object.keys(D.reqs.refs), ...Object.keys(D.reqs.staff)].map(k => k[0]))];
+  for (const sp of sps) out.push({ label: `Abteilung ${SPARTEN[sp].name}`, have: hasDept(sp) ? 1 : 0, need: 1 });
+  for (const k in D.reqs.refs) { const { sp, lvl } = parseKey(k); out.push({ label: `${D.reqs.refs[k]} erledigte ${SPARTEN[sp].name}-Aufträge der Stufe ${lvl}`, have: S.done[k] || 0, need: D.reqs.refs[k] }); }
   out.push({ label: `Ruf mindestens ${D.reqs.rep}`, have: Math.round(S.rep), need: D.reqs.rep });
-  for (const lvl in D.reqs.staff) out.push({ label: `${D.reqs.staff[lvl]}× ${QUALS[lvl].name} im Betrieb`, have: S.staff.filter(p => p.level >= lvl).length, need: D.reqs.staff[lvl] });
+  for (const k in D.reqs.staff) out.push({ label: `${D.reqs.staff[k]}× ${keyLabel(k)} im Betrieb`, have: S.staff.filter(p => fits(p, k)).length, need: D.reqs.staff[k] });
   for (const t of D.reqs.vehicles) out.push({ label: VEHICLE_TYPES[t].name, have: S.vehicles.filter(v => v.type === t).length, need: 1 });
   for (const r of out) r.ok = r.have >= r.need;
   return out;
@@ -720,8 +779,9 @@ function step() {
   if (S.time % 1440 === 6 * 60) refreshCandidates();
   if (S.time % 60 === 30) save();
   if (S.time >= S.nextOfferAt) {
-    if (S.jobs.filter(j => j.status === 'offer').length < 9) genOffer();
-    S.nextOfferAt = S.time + Math.round(rnd(12, 28) * offerFactor(S.time));
+    const nd = S.depts.length;
+    if (S.jobs.filter(j => j.status === 'offer').length < 7 + 3 * nd) genOffer();
+    S.nextOfferAt = S.time + Math.round(rnd(12, 28) * offerFactor(S.time) / (1 + 0.6 * (nd - 1)));
   }
   contractsTick();
   if (S.cash < -25000) {
