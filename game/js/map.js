@@ -37,7 +37,7 @@ const MapView = {
   },
 
   // Betriebshof und Einsatzgebiet der laufenden Partie anzeigen
-  showCompany() {
+  showCompany(recenter = true) {
     if (!this.ok) return;
     const c = city();
     if (this.depotM) this.depotM.remove();
@@ -45,7 +45,7 @@ const MapView = {
     this.areaC = L.circle(c.center, { radius: c.radiusKm * 1000, color: '#f0a500', weight: 1, opacity: 0.35, fill: false, dashArray: '6 6', interactive: false }).addTo(this.map);
     this.depotM = L.marker(c.depot, { icon: L.divIcon({ className: 'depot-icon', html: '🏭', iconSize: [30, 30] }), zIndexOffset: 1000 })
       .addTo(this.map).bindTooltip(c.depotName);
-    this.map.setView(c.center, c.radiusKm > 5 ? 12 : 13);
+    if (recenter) this.map.setView(c.center, c.radiusKm > 5 ? 12 : 13);
   },
 
   // ---------- Standortwahl ----------

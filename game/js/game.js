@@ -231,25 +231,47 @@ function travelFactor(t) {
   return 1;
 }
 // Plant eine Fahrt: mit Straßennetz entlang echter Straßen, sonst Luftlinie mit Umwegfaktor
+// Quelle: lokales Straßennetz > zwischengespeicherte Route vom Routing-Server > Luftlinie
 function planTrip(from, to, speed, fromDepot, t0) {
   const aus = fromDepot ? 3 : 0;          // Ausrückzeit am Hof
   const tf = travelFactor(t0);
+  const base = { from: from.slice(), to: to.slice(), t0, speed, fromDepot: !!fromDepot };
+  let path = null, cum = null, sec = 0;
   if (Roads.ready()) {
     const r = Roads.route(Roads.nearest(from), Roads.nearest(to));
     if (r) {
-      const drive = r.sec / 60 * 1.2 * (38 / speed) * tf;   // 1,2 = Ampeln, Abbiegen, Parken
-      const dur = Math.max(1, Math.round(drive + aus));
       const rd = x => Math.round(x * 1e5) / 1e5;
-      const path = [from.slice(), ...r.nodes.map(n => Roads.coord(n).map(rd)), to.slice()];
-      const cum = [0, ...r.cum, r.sec];
-      const times = cum.map(c => Math.round((t0 + aus + (r.sec ? c / r.sec : 1) * (dur - aus)) * 100) / 100);
-      return { from: from.slice(), to: to.slice(), t0, t1: t0 + dur, path, times };
+      path = r.nodes.map(n => Roads.coord(n).map(rd)); cum = r.cum; sec = r.sec;
     }
+  }
+  if (!path) { const o = Osrm.cached(from, to); if (o) { path = o.path; cum = o.cum; sec = o.sec; } }
+  if (path) {
+    const drive = sec / 60 * 1.2 * (38 / speed) * tf;   // 1,2 = Ampeln, Abbiegen, Parken
+    const dur = Math.max(1, Math.round(drive + aus));
+    const P = [from.slice(), ...path, to.slice()];
+    const C = [0, ...cum, sec];
+    const times = C.map(c => Math.round((t0 + aus + (sec ? c / sec : 1) * (dur - aus)) * 100) / 100);
+    return { ...base, t1: t0 + dur, path: P, times };
   }
   const km = haversine(from, to) * 1.35;
   const dur = Math.max(1, Math.round(km / speed * 60 * tf + aus));
-  return { from: from.slice(), to: to.slice(), t0, t1: t0 + dur };
+  return { ...base, t1: t0 + dur, straight: true };
 }
+const routeKnown = (from, to) => Roads.ready() || !!Osrm.cached(from, to);
+
+// Luftlinien-Fahrt nachträglich durch eine echte Route ersetzen
+function upgradeTrip(v) {
+  const trip = v.trip;
+  if (!trip || !trip.straight) return;
+  const apply = () => {
+    if (v.trip !== trip) return;
+    const nt = planTrip(trip.from, trip.to, trip.speed || VEHICLE_TYPES[v.type].speed, trip.fromDepot, trip.t0);
+    if (!nt.straight) { v.trip = nt; markDirty(); }
+  };
+  if (Roads.ready()) apply();
+  else if (Osrm.enabled()) { const S0 = Game.S; Osrm.route(trip.from, trip.to).then(() => { if (Game.S === S0) apply(); }); }
+}
+function upgradeAllTrips() { if (Game.S) for (const v of Game.S.vehicles) upgradeTrip(v); }
 function travelMin(from, to, speed, fromDepot) {
   const t0 = Game.S.time;
   return planTrip(from, to, speed, fromDepot, t0).t1 - t0;
@@ -315,6 +337,24 @@ function createJob(typeId, opts = {}) {
     payAdd: 0, twistDone: false, reinforcement: null, workStart: null,
   };
 }
+// Auftrag an einer echten Straße erzeugen. Ohne lokales Straßennetz fragt das Spiel
+// den Routing-Server nach der nächsten Straße (asynchron), sonst Zufallspunkt.
+function spawnJob(typeId, done) {
+  if (Roads.ready() || !Osrm.enabled()) return done(createJob(typeId));
+  const S0 = Game.S, c = city();
+  const attempt = n => {
+    const p = randomPointAround(c.center, c.radiusKm);
+    Osrm.nearest(p).then(r => {
+      if (Game.S !== S0) return;
+      if (Roads.ready()) return done(createJob(typeId));
+      if (r && r.name && r.dist < 400 && haversine(r.pos, c.center) <= c.radiusKm) return done(createJob(typeId, { pos: r.pos, addr: r.name + ' ' + rndi(1, 90) }));
+      if (n < 2 && Osrm.enabled()) return attempt(n + 1);
+      done(createJob(typeId));
+    });
+  };
+  attempt(0);
+}
+
 function genOffer() {
   const S = Game.S;
   const cap = maxCapableStage();
@@ -326,9 +366,7 @@ function genOffer() {
     if (T.stage < cap) return T.weight * 0.6;
     return T.weight;
   });
-  const job = createJob(id);
-  S.jobs.push(job);
-  markDirty();
+  spawnJob(id, job => { Game.S.jobs.push(job); markDirty(); });
 }
 function acceptJob(job) {
   const T = JOB_TYPES[job.typeId], S = Game.S;
@@ -352,6 +390,7 @@ function sendHome(v) {
   if (v.state === 'atJob') pushHist(v, v.arrivedAt, S.time, 'work', JOB_TYPES[jobById(v.jobId)?.typeId]?.short);
   v.state = 'returning'; v.jobId = null; v.pos = from;
   v.trip = planTrip(from, city().depot, VEHICLE_TYPES[v.type].speed, false, S.time);
+  upgradeTrip(v);
 }
 function removeJob(job) { Game.S.jobs = Game.S.jobs.filter(j => j.id !== job.id); markDirty(); }
 
@@ -424,6 +463,7 @@ function dispatch(job, vehicleIds, staffIds, wayIdx) {
     const from = vehiclePosAt(v, S.time);
     if (v.state === 'returning' && v.trip) pushHist(v, v.trip.t0, S.time, 'return');
     v.trip = planTrip(from, job.pos, VEHICLE_TYPES[v.type].speed, v.state === 'depot', S.time);
+    upgradeTrip(v);
     v.state = 'toJob'; v.jobId = job.id; v.pos = from;
     for (const sid of v.crew) {
       const p = staffById(sid); if (!p) continue;
@@ -512,6 +552,7 @@ function resumeAfterReinforcement(job) {
 function onArrival(v) {
   const S = Game.S, job = jobById(v.jobId);
   if (!job) return sendHome(v);
+  if (!Roads.ready()) Osrm.route(job.pos, city().depot);   // Rückweg schon vorab holen
   if (job.firstArrival == null) {
     job.firstArrival = S.time;
     if (!job.reactionMissed) notify(`📍 ${v.name} ist vor Ort: ${job.addr} – Reaktionsfrist eingehalten.`, 'good');
@@ -612,12 +653,13 @@ function contractsTick() {
       c.nextJobAt = S.time + rndi(D.interval[0], D.interval[1]);
       const types = D.jobTypes.filter(t => acceptableWays(JOB_TYPES[t]).length);
       if (!types.length) continue;
-      const job = createJob(weightedPick(types, t => JOB_TYPES[t].weight));
-      job.contractId = id;
-      job.base = Math.round(job.base * D.payFactor / 10) * 10;
-      acceptJob(job);
-      S.jobs.push(job);
-      notify(`📥 Vertragsauftrag (${D.client}): ${job.name}, ${job.addr}`, 'warn');
+      spawnJob(weightedPick(types, t => JOB_TYPES[t].weight), job => {
+        job.contractId = id;
+        job.base = Math.round(job.base * D.payFactor / 10) * 10;
+        acceptJob(job);
+        Game.S.jobs.push(job);
+        notify(`📥 Vertragsauftrag (${D.client}): ${job.name}, ${job.addr}`, 'warn');
+      });
     }
   }
 }
@@ -633,7 +675,7 @@ function vehicleTick(v) {
     pushHist(v, trip.t0, trip.t1, 'drive');
     onArrival(v);
   } else if (v.state === 'returning') {
-    v.state = 'depot';
+    v.state = 'depot'; v.pos = city().depot.slice();
     pushHist(v, trip.t0, trip.t1, 'return');
     for (const sid of v.crew) { const p = staffById(sid); if (p) { p.state = 'depot'; p.vehicleId = null; } }
     v.crew = []; v.jobId = null;
@@ -686,4 +728,29 @@ function step() {
     S.gameOver = true; save();
     if (typeof UI !== 'undefined') UI.gameOver();
   }
+}
+
+// ---------- Straßennetz im Hintergrund laden ----------
+function startRoadLoading(retry = true) {
+  const S0 = Game.S;
+  if (!S0) return;
+  if (!Roads.ready() && Osrm.enabled()) {   // Hof schon vorab auf die Straße setzen
+    Osrm.nearest(S0.city.depot).then(r => {
+      if (Game.S !== S0 || Roads.ready() || !r || r.dist > 400) return;
+      S0.city.depot = r.pos;
+      for (const v of S0.vehicles) if (v.state === 'depot') v.pos = r.pos.slice();
+      if (typeof MapView !== 'undefined') MapView.showCompany(false);
+    });
+  }
+  Roads.load(S0.city).then(ok => {
+    if (Game.S !== S0) return;
+    if (ok) {
+      snapToRoads(); upgradeAllTrips();
+      if (typeof MapView !== 'undefined') MapView.showCompany(false);
+      notify('🛣 Straßennetz geladen – Routen werden jetzt direkt im Browser berechnet.', 'good');
+    } else if (Roads.status === 'failed') {
+      notify(`Straßennetz noch nicht geladen (${Roads.error}). ${Osrm.enabled() ? 'Routen kommen so lange vom Routing-Server.' : 'Fahrzeuge fahren so lange Luftlinie.'}`, 'warn');
+      if (retry) setTimeout(() => { if (Game.S === S0) startRoadLoading(false); }, 60000);
+    }
+  });
 }

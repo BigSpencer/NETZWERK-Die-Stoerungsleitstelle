@@ -12,16 +12,9 @@ function togglePause() { Game.paused = !Game.paused; Game.autoPaused = false; }
   if (load()) {
     MapView.showCompany();
     UI.renderPanel();
-    Game.paused = true;
-    UI.showLoading(`Straßennetz von ${city().name} wird geladen …`);
-    Roads.load(city()).then(ok => {
-      UI.closeModal();
-      Game.paused = false;
-      if (ok) { snapToRoads(); MapView.showCompany(); }
-      else notify(`Straßennetz nicht geladen (${Roads.error}) – Fahrzeuge fahren Luftlinie.`, 'warn');
-      notify(`Spielstand geladen: ${city().name}, ${fmtDay(Game.S.time)}, ${fmtClock(Game.S.time)}.`, 'info');
-      if (Game.S.gameOver) UI.gameOver();
-    });
+    notify(`Spielstand geladen: ${city().name}, ${fmtDay(Game.S.time)}, ${fmtClock(Game.S.time)}.`, 'info');
+    startRoadLoading();
+    if (Game.S.gameOver) UI.gameOver();
   } else {
     UI.startSetup();
   }

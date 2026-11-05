@@ -37,7 +37,7 @@ async function idbPut(key, val) {
 }
 
 const Roads = {
-  g: null, status: 'none', error: '', key: null, cache: new Map(),
+  g: null, status: 'none', error: '', key: null, cache: new Map(), token: 0,
 
   cacheKey(c) { return `v1:${c.center[0].toFixed(3)},${c.center[1].toFixed(3)},${c.radiusKm}`; },
   ready() { return this.status === 'ready' && !!this.g; },
@@ -45,6 +45,7 @@ const Roads = {
   async load(c) {
     const key = this.cacheKey(c);
     if (this.ready() && this.key === key) return true;
+    const tok = ++this.token;
     this.status = 'loading'; this.g = null; this.cache.clear(); this.error = '';
     try {
       let g = await idbGet(key);
@@ -54,10 +55,12 @@ const Roads = {
         if (!g) throw new Error('Für dieses Gebiet wurden keine Straßen gefunden.');
         idbPut(key, { lat: g.lat, lng: g.lng, eFrom: g.eFrom, eTo: g.eTo, eW: g.eW, names: g.names, cand: g.cand });
       }
+      if (tok !== this.token) return false;   // inzwischen anderes Spiel gestartet
       this.prepare(g);
       this.g = g; this.key = key; this.status = 'ready';
       return true;
     } catch (e) {
+      if (tok !== this.token) return false;
       this.status = 'failed';
       this.error = (e && e.name === 'AbortError') ? 'Zeitüberschreitung beim Laden.' : (e && e.message) || String(e);
       return false;
@@ -247,5 +250,79 @@ const Roads = {
     if (this.cache.size > 1500) this.cache.clear();
     this.cache.set(key, res);
     return res;
+  },
+};
+
+// =====================================================================
+//  Öffentlicher Routing-Server (OSRM) – überbrückt die Zeit, bis das
+//  Straßennetz geladen ist. Höchstens 1 Anfrage pro Sekunde.
+// =====================================================================
+const OSRM_URL = 'https://router.project-osrm.org';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const Osrm = {
+  fails: 0, queue: [], busy: false, last: 0, cache: new Map(), pending: new Map(),
+
+  enabled() { return this.fails < 4; },
+  key(a, b) { return a[0].toFixed(4) + ',' + a[1].toFixed(4) + '>' + b[0].toFixed(4) + ',' + b[1].toFixed(4); },
+  cached(a, b) { return this.cache.get(this.key(a, b)) || null; },
+
+  request(url) {
+    if (!this.enabled()) return Promise.resolve(null);
+    return new Promise(res => { this.queue.push({ url, res }); this.pump(); });
+  },
+  async pump() {
+    if (this.busy) return;
+    this.busy = true;
+    while (this.queue.length) {
+      const wait = this.last + 1050 - Date.now();
+      if (wait > 0) await sleep(wait);
+      const { url, res } = this.queue.shift();
+      this.last = Date.now();
+      if (!this.enabled()) { res(null); continue; }
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 8000);
+        const r = await fetch(url, { signal: ctl.signal });
+        clearTimeout(timer);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        if (j.code !== 'Ok') throw new Error(j.code);
+        this.fails = 0;
+        res(j);
+      } catch (e) { this.fails++; res(null); }
+    }
+    this.busy = false;
+  },
+
+  // Route holen (mit Zwischenspeicher); Ergebnis: { path, cum (Sekunden je Punkt), sec }
+  route(a, b) {
+    const k = this.key(a, b);
+    if (this.cache.has(k)) return Promise.resolve(this.cache.get(k));
+    if (this.pending.has(k)) return this.pending.get(k);
+    const url = `${OSRM_URL}/route/v1/driving/${a[1].toFixed(5)},${a[0].toFixed(5)};${b[1].toFixed(5)},${b[0].toFixed(5)}?overview=full&geometries=geojson&annotations=duration`;
+    const p = this.request(url).then(j => {
+      this.pending.delete(k);
+      const r = j && j.routes && j.routes[0];
+      if (!r) return null;
+      const path = r.geometry.coordinates.map(([x, y]) => [Math.round(y * 1e5) / 1e5, Math.round(x * 1e5) / 1e5]);
+      const segs = (r.legs[0] && r.legs[0].annotation && r.legs[0].annotation.duration) || [];
+      const cum = [0];
+      for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + (segs.length === path.length - 1 ? segs[i - 1] : r.duration / (path.length - 1)));
+      const val = { path, cum, sec: cum[cum.length - 1] || r.duration };
+      if (this.cache.size > 500) this.cache.clear();
+      this.cache.set(k, val);
+      return val;
+    });
+    this.pending.set(k, p);
+    return p;
+  },
+
+  // Nächste Straße zu einem Punkt: { pos, name, dist (m) }
+  nearest(p) {
+    return this.request(`${OSRM_URL}/nearest/v1/driving/${p[1].toFixed(5)},${p[0].toFixed(5)}?number=1`).then(j => {
+      const w = j && j.waypoints && j.waypoints[0];
+      return w ? { pos: [w.location[1], w.location[0]], name: w.name, dist: w.distance } : null;
+    });
   },
 };

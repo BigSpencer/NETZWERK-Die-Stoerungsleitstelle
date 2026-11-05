@@ -82,6 +82,12 @@ const UI = {
     $('#recv').textContent = fmtEur(sum(S.receivables.map(r => r.amount)));
     $('#rep').textContent = Math.round(S.rep);
     $('#refs').textContent = `${S.done[1] || 0} / ${S.done[2] || 0} / ${S.done[3] || 0}`;
+    const rs = Roads.ready() ? ['🛣 Straßennetz', 'Routen werden direkt im Browser berechnet.', 'ok']
+      : Roads.status === 'loading' ? ['🛣 Netz lädt …', 'Das Straßennetz wird im Hintergrund geladen. Bis dahin kommen Routen vom Routing-Server.', 'warn']
+      : Osrm.enabled() ? ['🛣 Routing-Server', 'Routen kommen vom öffentlichen OSRM-Server.', 'warn']
+      : ['📏 Luftlinie', 'Weder Straßennetz noch Routing-Server erreichbar – Fahrzeuge fahren Luftlinie.', 'bad'];
+    const rel = $('#roadstat');
+    if (rel.textContent !== rs[0]) { rel.textContent = rs[0]; rel.title = rs[1]; rel.className = 'roadstat ' + rs[2]; }
     $('#btn-pause').textContent = Game.paused ? '▶' : '❚❚';
     $('#btn-pause').classList.toggle('active', Game.paused);
     document.querySelectorAll('[data-speed]').forEach(b => b.classList.toggle('active', !Game.paused && Number(b.dataset.speed) === Game.speed));
@@ -447,6 +453,10 @@ const UI = {
     }
     st.wayIdx = first >= 0 ? first : Math.max(0, reqs.findIndex((w, i) => usable(i)));
     applySuggest();
+    if (!Roads.ready() && Osrm.enabled()) {   // echte Fahrzeiten vom Routing-Server nachladen
+      const sorted = availableVehicles().sort((a, b) => (st.veh.has(b.id) - st.veh.has(a.id)));
+      for (const v of sorted.slice(0, 6)) Osrm.route(vehiclePosAt(v, Game.S.time), job.pos).then(() => { if (this.modal && this.modal.dispatchJob === jobId) this.refreshModal(); });
+    }
 
     const selection = () => {
       const avail = availableVehicles();
@@ -475,7 +485,7 @@ const UI = {
         return `<label class="pickrow"><input type="checkbox" data-kind="veh" value="${v.id}" ${st.veh.has(v.id) ? 'checked' : ''}>
           <span class="vicon">${VEHICLE_TYPES[v.type].icon}</span><span class="grow"><b>${esc(v.name)}</b> <small>${VEHICLE_TYPES[v.type].seats} Sitze · ${stateLabelVehicle(v)}</small>
           ${crew.length ? `<br><small>Besatzung fährt mit: ${crew.map(p => `${esc(p.name)} (${QUALS[p.level].short})`).join(', ')}</small>` : ''}</span>
-          <span class="eta">${etaFor(v, job.pos)} min</span></label>`;
+          <span class="eta">${routeKnown(vehiclePosAt(v, Game.S.time), job.pos) ? '' : '≈ '}${etaFor(v, job.pos)} min</span></label>`;
       }).join('') : '<p class="empty">Kein Fahrzeug verfügbar.</p>';
 
       const staffHtml = depotStaff.length ? depotStaff.map(p => `<label class="pickrow"><input type="checkbox" data-kind="staff" value="${p.id}" ${st.staff.has(p.id) ? 'checked' : ''}>
@@ -503,6 +513,7 @@ const UI = {
 
     this.openModal({
       dismissable: true,
+      dispatchJob: jobId,
       render,
       live: () => {
         const j = jobById(jobId);
@@ -628,21 +639,9 @@ const UI = {
       <div class="actions"><button data-act="found">Betrieb in ${esc(su.sel.name)} gründen</button></div></div>`;
   },
 
-  async foundCompany() {
+  foundCompany() {
     const su = Game.setup; if (!su || !su.sel) return;
     const cfg = { name: su.sel.name, center: su.sel.center, radiusKm: su.sel.radiusKm, depot: su.depot, depotName: 'Betriebshof ' + su.sel.name };
-    this.showLoading(`Straßennetz von ${cfg.name} wird geladen …`);
-    const ok = await Roads.load(cfg);
-    if (!ok) {
-      const choice = await this.ask('Straßennetz nicht geladen',
-        `Das Straßennetz konnte nicht von OpenStreetMap geladen werden (${Roads.error}). Ohne Straßennetz fahren die Fahrzeuge Luftlinie, und Aufträge können auch abseits von Straßen liegen.`,
-        [['retry', 'Erneut versuchen'], ['plain', 'Ohne Straßennetz spielen']]);
-      if (choice === 'retry') return this.foundCompany();
-    } else {
-      const n = Roads.nearest(cfg.depot);
-      if (n != null) cfg.depot = Roads.coord(n);
-    }
-    this.closeModal();
     MapView.endSetup();
     Game.setup = null;
     newGame(cfg);
@@ -651,22 +650,8 @@ const UI = {
     $('#gantt').hidden = false;
     MapView.showCompany();
     this.tab = 'jobs'; this.syncTabs(); this.renderPanel();
+    startRoadLoading();
     this.showIntro();
-  },
-
-  showLoading(text) {
-    this.openModal({ dismissable: false, render: () => `<div class="loading"><div class="spinner"></div><div><b>${esc(text)}</b>
-      <p class="hint">Die Daten kommen von OpenStreetMap. In Großstädten kann das bis zu einer Minute dauern, danach sind sie im Browser gespeichert.</p></div></div>` });
-  },
-
-  ask(title, text, buttons) {
-    return new Promise(res => {
-      this.openModal({
-        dismissable: false,
-        render: () => `<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="actions right">${buttons.map(([k, l], i) => `<button class="${i ? '' : 'ghost'}" data-m="${k}">${esc(l)}</button>`).join('')}</div>`,
-        onClick: e => { const b = e.target.closest('[data-m]'); if (b) { this.closeModal(); res(b.dataset.m); } },
-      });
-    });
   },
 
   toast(text, kind) {
