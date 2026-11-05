@@ -9,18 +9,20 @@ function togglePause() { Game.paused = !Game.paused; Game.autoPaused = false; }
 (function start() {
   UI.init();
   MapView.init();
-  const loaded = load();
-  if (!loaded) newGame();
-  UI.renderPanel();
-  if (!loaded) UI.showIntro();
-  else notify(`Spielstand geladen: ${fmtDay(Game.S.time)}, ${fmtClock(Game.S.time)}.`, 'info');
-  if (Game.S.gameOver) UI.gameOver();
+  if (load()) {
+    MapView.showCompany();
+    UI.renderPanel();
+    notify(`Spielstand geladen: ${city().name}, ${fmtDay(Game.S.time)}, ${fmtClock(Game.S.time)}.`, 'info');
+    if (Game.S.gameOver) UI.gameOver();
+  } else {
+    UI.startSetup();
+  }
 
   let last = performance.now(), acc = 0;
   function frame(now) {
     const dt = Math.min(250, now - last);
     last = now;
-    if (!Game.paused && !Game.S.gameOver) {
+    if (Game.S && !Game.paused && !Game.S.gameOver) {
       acc += dt * Game.speed;
       let steps = 0;
       while (acc >= 1000 && steps < 120) { acc -= 1000; step(); steps++; }
@@ -30,5 +32,5 @@ function togglePause() { Game.paused = !Game.paused; Game.autoPaused = false; }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.addEventListener('beforeunload', save);
+  window.addEventListener('beforeunload', () => { if (Game.S) save(); });
 })();

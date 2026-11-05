@@ -161,3 +161,15 @@ ul.log li.good { color: var(--ok); } ul.log li.bad { color: var(--bad); } ul.log
   :root { --label-w: 86px; }
 }
 .card-h .pay { white-space: nowrap; } .card-h b { min-width: 0; }
+
+[hidden] { display: none !important; }
+.leaflet-container { background-color: #10161d; background-image: linear-gradient(rgba(240,165,0,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(240,165,0,.05) 1px, transparent 1px); background-size: 40px 40px; }
+.map-note { position: absolute; left: 12px; right: 12px; bottom: 26px; z-index: 800; background: rgba(22, 28, 35, .92); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--muted); pointer-events: none; }
+.map-note code { color: var(--text); }
+#city-search { width: 100%; margin: 8px 0; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; }
+#city-search:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.city-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.city { background: var(--card); color: var(--text); border: 1px solid var(--line); text-align: left; padding: 6px 8px; font-weight: 500; display: flex; flex-direction: column; min-width: 0; }
+.city b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.city.active { border-color: var(--accent); background: var(--card2); }
+.setup-card { border-color: var(--accent); }

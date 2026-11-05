@@ -41,6 +41,9 @@ const UI = {
       const el = e.target.closest('[data-act]');
       if (el && !el.disabled) this.act(el.dataset.act, el.dataset);
     });
+    body.addEventListener('input', e => {
+      if (e.target.id === 'city-search' && Game.setup) { Game.setup.query = e.target.value; this.renderSetupList(); }
+    });
     const modal = $('#modal');
     modal.addEventListener('click', e => { if (this.modal?.onClick) this.modal.onClick(e); });
     modal.addEventListener('change', e => { if (this.modal?.onChange) this.modal.onChange(e); });
@@ -60,6 +63,7 @@ const UI = {
 
   // ---------- Frame-Update ----------
   frame(realNow) {
+    if (!Game.S) return;
     const t = nowT();
     if (Game.dirty && !this.pointerDown && realNow - this.lastPanel > 200) {
       Game.dirty = false; this.lastPanel = realNow; this.renderPanel();
@@ -120,6 +124,8 @@ const UI = {
       case 'c-cancel': this.confirm('Vertrag kündigen?', 'Laufende Vertragsaufträge bleiben bestehen. Ruf −5.', () => cancelContract(d.cid)); break;
       case 'set-pause': Game.S.settings.pauseOnDecision = !Game.S.settings.pauseOnDecision; break;
       case 'tab': this.tab = d.tab; this.syncTabs(); break;
+      case 'pick-city': this.setupPick(CITIES[Number(d.idx)]); return;
+      case 'found': this.foundCompany(); return;
     }
     markDirty();
   },
@@ -354,7 +360,7 @@ const UI = {
       if (job) {
         const T = JOB_TYPES[job.typeId];
         const fin = estFinish(job, now);
-        const back = travelMin(job.pos, CITY.depot, VEHICLE_TYPES[v.type].speed, false);
+        const back = travelMin(job.pos, city().depot, VEHICLE_TYPES[v.type].speed, false);
         const cls = `work s${job.stage}` + (job.status === 'decision' || job.status === 'reinforce' ? ' wait' : '');
         if (v.state === 'toJob') {
           segs += seg(v.trip.t0, v.trip.t1, 'drive', '', 'Anfahrt');
@@ -530,7 +536,7 @@ const UI = {
     this.openModal({
       dismissable: true,
       render: () => `<h2>NETZWERK – Die Störungsleitstelle</h2>
-        <p>Du leitest einen kleinen <b>Entstörungsdienst für Elektro-Infrastruktur</b> in ${esc(CITY.name)}. Aufträge kommen von der Auftragsbörse oder später aus Rahmenverträgen – jeder mit <b>Reaktionsfrist</b>, <b>Erledigungsfrist</b> und Vergütung.</p>
+        <p>Du leitest einen kleinen <b>Entstörungsdienst für Elektro-Infrastruktur</b> in ${esc(city().name)}. Aufträge kommen von der Auftragsbörse oder später aus Rahmenverträgen – jeder mit <b>Reaktionsfrist</b>, <b>Erledigungsfrist</b> und Vergütung.</p>
         <ol>
           <li><b>Annehmen:</b> Wähle in der Auftragsbörse einen Auftrag, den dein Betrieb leisten kann.</li>
           <li><b>Disponieren:</b> Wähle Fahrzeuge und Personal. Der Vorschlag passt meist schon.</li>
@@ -545,9 +551,7 @@ const UI = {
   },
 
   confirmNewGame() {
-    this.confirm('Neues Spiel starten?', 'Der aktuelle Spielstand wird überschrieben.', () => {
-      MapView.reset(); newGame(); save(); this.showIntro();
-    });
+    this.confirm('Neues Spiel starten?', 'Der aktuelle Spielstand wird überschrieben, sobald du einen neuen Betrieb gründest.', () => this.startSetup());
   },
 
   gameOver() {
@@ -557,8 +561,85 @@ const UI = {
       render: () => `<h2>💸 Insolvenz</h2><p>Dein Betrieb ist zahlungsunfähig (${fmtEur(S.cash)}).</p>
         <p>Du hast ${sum(Object.values(S.done))} Aufträge erledigt und bis ${fmtDay(S.time)} durchgehalten.</p>
         <div class="actions right"><button data-m="new">Neues Spiel</button></div>`,
-      onClick: e => { if (e.target.closest('[data-m]')) { this.closeModal(); MapView.reset(); newGame(); save(); } },
+      onClick: e => { if (e.target.closest('[data-m]')) this.startSetup(); },
     });
+  },
+
+  // ---------- Standortwahl ----------
+  startSetup() {
+    this.closeModal();
+    Game.S = null;
+    const su = Game.setup = { sel: null, depot: null, query: '' };
+    $('#tabs').hidden = true;
+    $('#gantt').hidden = true;
+    $('#clock').textContent = 'Standortwahl';
+    $('#panel-body').innerHTML = `<h3>Wo gründest du deinen Betrieb?</h3>
+      <p class="hint">Wähle eine Stadt aus der Liste oder klicke auf der Karte auf einen der orangen Stadtpunkte.
+      Danach legst du per Klick in die Karte fest, wo dein Betriebshof steht. Ein Klick außerhalb des Einsatzgebiets verschiebt das ganze Gebiet.</p>
+      <div id="city-sel"></div>
+      <input id="city-search" type="search" placeholder="Stadt suchen …" autocomplete="off">
+      <div id="city-list" class="city-list"></div>`;
+    const nearest = pos => CITIES.reduce((b, c) => (!b || haversine(pos, c.center) < haversine(pos, b.center)) ? c : b, null);
+    const defaultDepot = c => [c.center[0] - c.radiusKm * 0.15 / 111.32, c.center[1] - c.radiusKm * 0.3 / (111.32 * Math.cos(c.center[0] * Math.PI / 180))];
+    this.setupPick = c => {
+      su.sel = { name: c.name, center: c.center.slice(), radiusKm: c.radiusKm };
+      su.depot = defaultDepot(su.sel);
+      MapView.flyToArea(su.sel);
+      MapView.previewSetup(su.sel, su.depot);
+      this.renderSetupSel(); this.renderSetupList();
+    };
+    MapView.startSetup(c => this.setupPick(c), (pos, dragged) => {
+      if (!su.sel || (!dragged && MapView.zoom() < 10)) {
+        const n = nearest(pos);
+        if (n && haversine(pos, n.center) < 40) this.setupPick(n);
+        return;
+      }
+      if (haversine(pos, su.sel.center) <= su.sel.radiusKm * 1.2) su.depot = pos;
+      else if (!dragged) {
+        const n = nearest(pos);
+        su.sel = { name: n && haversine(pos, n.center) < 15 ? n.name : 'Eigenes Gebiet', center: pos, radiusKm: 4 };
+        su.depot = defaultDepot(su.sel);
+      }
+      MapView.previewSetup(su.sel, su.depot);
+      this.renderSetupSel();
+    });
+    this.renderSetupSel(); this.renderSetupList();
+  },
+
+  renderSetupList() {
+    const su = Game.setup; if (!su) return;
+    const q = su.query.trim().toLowerCase();
+    const list = CITIES.map((c, i) => ({ c, i })).filter(({ c }) => !q || c.name.toLowerCase().includes(q))
+      .sort((a, b) => a.c.name.localeCompare(b.c.name, 'de'));
+    const sizeName = { L: 'Großstadt', M: 'Stadt', S: 'Mittelstadt' };
+    $('#city-list').innerHTML = list.length ? list.map(({ c, i }) => `<button class="city ${su.sel && su.sel.name === c.name ? 'active' : ''}" data-act="pick-city" data-idx="${i}">
+      <b>${esc(c.name)}</b><small>${sizeName[c.size]} · ${c.radiusKm} km</small></button>`).join('')
+      : '<p class="empty">Keine Stadt gefunden. Du kannst auch direkt auf die Karte klicken.</p>';
+  },
+
+  renderSetupSel() {
+    const su = Game.setup; if (!su) return;
+    const el = $('#city-sel');
+    if (!su.sel) { el.innerHTML = ''; return; }
+    const d = haversine(su.depot, su.sel.center);
+    el.innerHTML = `<div class="card setup-card"><div class="card-h"><b>📍 ${esc(su.sel.name)}</b><span class="tag">Radius ${su.sel.radiusKm} km</span></div>
+      <div class="meta">Betriebshof ${d < 0.3 ? 'im Zentrum' : d.toFixed(1).replace('.', ',') + ' km vom Zentrum'} – zum Verschieben in die Karte klicken.</div>
+      <div class="meta">Großes Gebiet = mehr Aufträge in der Nähe anderer, aber längere Anfahrten.</div>
+      <div class="actions"><button data-act="found">Betrieb in ${esc(su.sel.name)} gründen</button></div></div>`;
+  },
+
+  foundCompany() {
+    const su = Game.setup; if (!su || !su.sel) return;
+    const cfg = { name: su.sel.name, center: su.sel.center, radiusKm: su.sel.radiusKm, depot: su.depot, depotName: 'Betriebshof ' + su.sel.name };
+    MapView.endSetup();
+    Game.setup = null;
+    newGame(cfg);
+    save();
+    $('#tabs').hidden = false;
+    $('#gantt').hidden = false;
+    MapView.showCompany();
+    this.tab = 'jobs'; this.syncTabs(); this.renderPanel();
+    this.showIntro();
   },
 
   toast(text, kind) {

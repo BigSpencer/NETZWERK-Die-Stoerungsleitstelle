@@ -7,20 +7,78 @@ const STAGE_COLORS = { 1: '#2f9e5b', 2: '#2f7fd8', 3: '#8a4fd1' };
 
 const MapView = {
   map: null, ok: false, jobM: new Map(), vehM: new Map(), lines: new Map(),
+  depotM: null, areaC: null, setupLayer: null, tilesLoaded: 0, noteShown: false,
 
   init() {
     if (!window.L) {
       document.getElementById('map').innerHTML =
-        '<div class="map-fallback">Die Karte konnte nicht geladen werden (keine Internetverbindung?).<br>Das Spiel funktioniert trotzdem – nutze die Listen links.</div>';
+        '<div class="map-fallback">Die Karte konnte nicht geladen werden.<br>Das Spiel funktioniert trotzdem – nutze die Listen links.</div>';
       return;
     }
-    this.map = L.map('map', { zoomControl: true }).setView(CITY.center, 13);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende',
+    this.map = L.map('map', { zoomControl: true }).setView([51.2, 10.4], 6);
+    // CARTO-Kacheln funktionieren auch beim Öffnen der Datei per Doppelklick (file://)
+    const tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd', maxZoom: 19,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende © <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(this.map);
-    L.marker(CITY.depot, { icon: L.divIcon({ className: 'depot-icon', html: '🏭', iconSize: [30, 30] }), zIndexOffset: 1000 })
-      .addTo(this.map).bindTooltip(CITY.depotName);
+    tiles.on('tileload', () => { this.tilesLoaded++; });
+    tiles.on('tileerror', () => { if (!this.tilesLoaded) this.showTileNote(); });
+    this.map.on('click', e => { if (this.onSetupClick) this.onSetupClick([e.latlng.lat, e.latlng.lng]); });
     this.ok = true;
+  },
+
+  showTileNote() {
+    if (this.noteShown) return;
+    this.noteShown = true;
+    const el = document.createElement('div');
+    el.className = 'map-note';
+    el.innerHTML = 'Die Kartenbilder können hier nicht geladen werden (z. B. in der Vorschau auf claude.ai oder ohne Internet). '
+      + 'Das Spiel funktioniert trotzdem. Mit Straßenkarte: Spiel herunterladen und <code>game/index.html</code> öffnen.';
+    document.getElementById('map').appendChild(el);
+  },
+
+  // Betriebshof und Einsatzgebiet der laufenden Partie anzeigen
+  showCompany() {
+    if (!this.ok) return;
+    const c = city();
+    if (this.depotM) this.depotM.remove();
+    if (this.areaC) this.areaC.remove();
+    this.areaC = L.circle(c.center, { radius: c.radiusKm * 1000, color: '#f0a500', weight: 1, opacity: 0.35, fill: false, dashArray: '6 6', interactive: false }).addTo(this.map);
+    this.depotM = L.marker(c.depot, { icon: L.divIcon({ className: 'depot-icon', html: '🏭', iconSize: [30, 30] }), zIndexOffset: 1000 })
+      .addTo(this.map).bindTooltip(c.depotName);
+    this.map.setView(c.center, c.radiusKm > 5 ? 12 : 13);
+  },
+
+  // ---------- Standortwahl ----------
+  startSetup(onPickCity, onClick) {
+    if (!this.ok) return;
+    this.reset();
+    if (this.depotM) { this.depotM.remove(); this.depotM = null; }
+    if (this.areaC) { this.areaC.remove(); this.areaC = null; }
+    this.map.setView([51.2, 10.4], 6);
+    this.setupLayer = L.layerGroup().addTo(this.map);
+    for (const c of CITIES) {
+      L.circleMarker(c.center, { radius: c.size === 'L' ? 7 : c.size === 'M' ? 5 : 4, color: '#f0a500', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.6 })
+        .bindTooltip(c.name, { direction: 'top' })
+        .on('click', ev => { L.DomEvent.stopPropagation(ev); onPickCity(c); })
+        .addTo(this.setupLayer);
+    }
+    this.onSetupClick = onClick;
+  },
+  previewSetup(sel, depot) {
+    if (!this.ok) return;
+    if (this.areaC) this.areaC.remove();
+    if (this.depotM) this.depotM.remove();
+    this.areaC = L.circle(sel.center, { radius: sel.radiusKm * 1000, color: '#f0a500', weight: 2, fillColor: '#f0a500', fillOpacity: 0.08, interactive: false }).addTo(this.map);
+    this.depotM = L.marker(depot, { draggable: true, icon: L.divIcon({ className: 'depot-icon', html: '🏭', iconSize: [30, 30] }), zIndexOffset: 1000 })
+      .addTo(this.map).bindTooltip('Dein Betriebshof – verschieben per Klick in die Karte oder Ziehen');
+    this.depotM.on('dragend', () => { const ll = this.depotM.getLatLng(); if (this.onSetupClick) this.onSetupClick([ll.lat, ll.lng], true); });
+  },
+  flyToArea(sel) { if (this.ok) this.map.flyTo(sel.center, sel.radiusKm > 5 ? 12 : 13, { duration: 0.8 }); },
+  zoom() { return this.ok ? this.map.getZoom() : 13; },
+  endSetup() {
+    this.onSetupClick = null;
+    if (this.setupLayer) { this.setupLayer.remove(); this.setupLayer = null; }
   },
 
   jobStyle(j) {

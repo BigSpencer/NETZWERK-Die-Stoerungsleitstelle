@@ -13,13 +13,14 @@ Kein Build nötig. Entweder:
   # dann http://localhost:8000 öffnen
   ```
 
-Für die Kartenkacheln (OpenStreetMap) wird eine Internetverbindung gebraucht. Ohne Verbindung läuft das Spiel trotzdem, nur ohne Kartenhintergrund. Der Spielstand wird automatisch im Browser gespeichert (`localStorage`).
+Beim ersten Start wählst du auf der Karte oder aus einer Liste mit rund 70 deutschen Städten, wo dein Betrieb sitzt, und setzt per Klick deinen Betriebshof. Für die Kartenbilder (OpenStreetMap-Daten über CARTO) wird eine Internetverbindung gebraucht. Ohne Verbindung, und in der Vorschau auf claude.ai, läuft das Spiel trotzdem, nur ohne Straßenkarte im Hintergrund. Der Spielstand wird automatisch im Browser gespeichert (`localStorage`).
 
 ## Was ist drin
 
 | Bereich | Umfang |
 |---|---|
-| Sparte | Elektro, Stadtgebiet Göttingen |
+| Standort | Freie Wahl: ca. 70 Städte (Einsatzradius nach Stadtgröße) oder ein eigenes Gebiet per Klick, Betriebshof frei platzierbar |
+| Sparte | Elektro |
 | Auftragsstufen | Stufe 1–3: Straßenlaterne, Unfallleuchte, Straßenzug, Hausanschluss, Kabelverteilerschrank, Trafostation, Kabelfehler, Folgeauftrag Trafo-Instandsetzung |
 | Zwei Wege | Trafostation: **Schaltberechtigung** (volle Vergütung) **oder** **Notstrom-Lkw** (60 %, Folgeauftrag geht evtl. an die Konkurrenz). Kabelfehler: **Messwagen** oder langsames **Aufgraben** |
 | Personal | Monteur → Elektrofachkraft → Schaltberechtigte Fachkraft. Weiterbildung setzt Praxis voraus, Person fällt während der Schulung aus. Bewerbermarkt, Löhne pro Stunde |

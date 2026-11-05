@@ -7,6 +7,7 @@ const SAVE_KEY = 'netzwerk_save_v1';
 const Game = { S: null, dirty: true, speed: 1, paused: false, autoPaused: false, frac: 0 };
 
 function markDirty() { Game.dirty = true; }
+function city() { return (Game.S && Game.S.city) || DEFAULT_CITY; }
 function nowT() { return Game.S.time + (Game.paused || Game.S.gameOver ? 0 : Game.frac); }
 
 // ---------- Hilfsfunktionen ----------
@@ -62,9 +63,9 @@ function earn(amount) { Game.S.cash += amount; Game.S.stats.earned += amount; }
 function changeRep(d) { Game.S.rep = clamp(Game.S.rep + d, 0, 100); }
 
 // ---------- Neues Spiel / Speichern ----------
-function newGame() {
+function newGame(cityCfg) {
   Game.S = {
-    version: 1, time: 7 * 60, seq: 1, cash: 15000, rep: 50,
+    version: 1, city: cityCfg || DEFAULT_CITY, time: 7 * 60, seq: 1, cash: 15000, rep: 50,
     done: { 1: 0, 2: 0, 3: 0 }, staff: [], vehicles: [], jobs: [], history: [], log: [],
     receivables: [], contracts: {}, market: { candidates: [] }, vehCount: {},
     nextOfferAt: 7 * 60 + 3,
@@ -76,7 +77,7 @@ function newGame() {
   addVehicle('TRANS');
   refreshCandidates();
   for (let i = 0; i < 3; i++) genOffer();
-  notify('Dein Betrieb ist eröffnet: 2 Monteure, 1 Transporter. Viel Erfolg!', 'good');
+  notify(`Dein Betrieb in ${city().name} ist eröffnet: 2 Monteure, 1 Transporter. Viel Erfolg!`, 'good');
   markDirty();
 }
 function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(Game.S)); } catch (e) { /* ignorieren */ } }
@@ -157,7 +158,7 @@ function addVehicle(type) {
   S.vehCount[type] = (S.vehCount[type] || 0) + 1;
   const v = {
     id: uid(), type, name: VEHICLE_TYPES[type].short + ' ' + S.vehCount[type],
-    state: 'depot', pos: CITY.depot.slice(), trip: null, jobId: null, crew: [], arrivedAt: 0, hist: [],
+    state: 'depot', pos: city().depot.slice(), trip: null, jobId: null, crew: [], arrivedAt: 0, hist: [],
   };
   S.vehicles.push(v);
   return v;
@@ -244,7 +245,7 @@ function createJob(typeId, opts = {}) {
   const base = Math.round(rnd(T.pay[0], T.pay[1]) * (0.85 + S.rep / 333) / 10) * 10;
   return {
     id: uid(), typeId, stage: T.stage, name: T.name, addr: opts.addr || randomAddr(),
-    pos: opts.pos || randomPointAround(CITY.center, CITY.radiusKm), base, status: 'offer',
+    pos: opts.pos || randomPointAround(city().center, city().radiusKm), base, status: 'offer',
     createdAt: S.time, expiresAt: S.time + (opts.expires || rndi(45, 100)), acceptedAt: null,
     reactionDue: null, completionDue: null, contractId: null, units: [], staffIds: [], wayIdx: null,
     firstArrival: null, reactionMissed: false, phases: null, phaseIdx: 0, phaseEnd: 0,
@@ -287,7 +288,7 @@ function sendHome(v) {
   if (v.state === 'toJob' && v.trip) pushHist(v, v.trip.t0, S.time, 'drive');
   if (v.state === 'atJob') pushHist(v, v.arrivedAt, S.time, 'work', JOB_TYPES[jobById(v.jobId)?.typeId]?.short);
   v.state = 'returning'; v.jobId = null; v.pos = from;
-  v.trip = { from, to: CITY.depot, t0: S.time, t1: S.time + travelMin(from, CITY.depot, VEHICLE_TYPES[v.type].speed, false) };
+  v.trip = { from, to: city().depot, t0: S.time, t1: S.time + travelMin(from, city().depot, VEHICLE_TYPES[v.type].speed, false) };
 }
 function removeJob(job) { Game.S.jobs = Game.S.jobs.filter(j => j.id !== job.id); markDirty(); }
 
